@@ -10,10 +10,24 @@ config.*
 *-Manifest.yaml
 prowler-output
 output
-prowler/*
+prowler
 prowler.err
 *.dist-info
 *.egg-info
+
+lambda/bin
+lambda/certifi
+lambda/certifi
+lambda/certifi-2023.5.7.dist-info
+lambda/charset_normalizer
+lambda/requests
+lambda/elastic_transport
+lambda/requests_aws4auth
+lambda/elasticsearch
+lambda/six.py
+lambda/idna
+lambda/urllib3
+
 
 # Created by https://www.gitignore.io/api/osx,python
 

@@ -8,6 +8,11 @@ Transform: AWS::Serverless-2016-10-31
 
 Parameters:
 
+  pOpenSearchAdminPassword:
+    Description: Initial Password for the OpenSearch Dashboard
+    Type: String
+    NoEcho: true
+
   pBucketName:
     Description: Name of the bucket to hold the results
     Type: String
@@ -345,7 +350,7 @@ Resources:
         InternalUserDatabaseEnabled: true
         MasterUserOptions:
           MasterUserName: admin
-          MasterUserPassword: D41d8cd98f00b204e9800$998ecf8427e
+          MasterUserPassword: !Ref pOpenSearchAdminPassword
       AccessPolicies:
         Version: 2012-10-17
         Statement:
@@ -629,6 +634,7 @@ Resources:
       Handler: import_findings.handler
       Role: !GetAtt LambdaRole.Arn
       CodeUri: ../lambda
+      # TODO - Set Concurrency here
       Events:
         SQSIngest:
           Type: SQS
@@ -660,6 +666,32 @@ Resources:
         Variables:
           FINDING_QUEUE_URL: !Ref FindingIngestEventQueue
 
+  ProcessSecHubFindingsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub "${AWS::StackName}-process-sechub"
+      Description: Process Security Hub Findings pushed to EventBus
+      Handler: process_sechub.handler
+      Role: !GetAtt LambdaRole.Arn
+      CodeUri: ../lambda
+      Events:
+        InspectorEventBridge:
+            Type: EventBridgeRule
+            Properties:
+              # DeadLetterConfig: DeadLetterConfig
+              # EventBusName: String
+              # Input: String
+              # InputPath: String
+              # Name: String
+              Pattern:
+                source:
+                  - aws.securityhub
+              # RetryPolicy: RetryPolicy
+              State: ENABLED
+              # Target: Target
+      Environment:
+        Variables:
+          ES_DOMAIN_ENDPOINT: !GetAtt ProwlerESDomain.DomainEndpoint
 
   #
   # S3 -> SNS -> SQS -> Lambda Plumbing

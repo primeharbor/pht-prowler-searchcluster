@@ -35,10 +35,8 @@ logging.getLogger('urllib3').setLevel(logging.WARNING)
 def handler(event, context):
     logger.debug("Received event: " + json.dumps(event, sort_keys=True))
 
-    today = dt.datetime.today().strftime('%Y-%m-%d')
-
     # hard code for now
-    index="prowler_findings"
+    index="securityhub_findings"
 
     region = os.environ['AWS_REGION']
     service = 'es'
@@ -52,25 +50,21 @@ def handler(event, context):
     bulk_ingest_body = ""
     count = 0
 
-    for sqs_record in event['Records']:
-        finding_body = json.loads(sqs_record['body'])
-        logger.info(f"Indexing finding for {finding_body['FindingUniqueId']} with a status of {finding_body['Status']}")
+    # Only grab the detail from the event. The other stuff is related to the eventbridge event wraper
 
-        # Give each finding a unique document id so we can track overtime.
-        doc_id = f"{finding_body['FindingUniqueId']}-{today}"
-
+    for finding_document in event['detail']['findings']:
+        doc_id = f"{finding_document['Id']}"
         command = {"index": {"_index": index, "_id": doc_id}}
         command_str = json.dumps(command, separators=(',', ':'))
-        document = json.dumps(finding_body, separators=(',', ':'))
+        document = json.dumps(finding_document, separators=(',', ':'), default=str)
         bulk_ingest_body += f"{command_str}\n{document}\n"
         count += 1
+        bulk_ingest_body += "\n"
 
     # Don't call ES if there is nothing to do.
     if count == 0:
         logger.warning("No objects to index.")
         return(event)
-
-    bulk_ingest_body += "\n"
 
     try:
         # Now index the document
