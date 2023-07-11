@@ -18,6 +18,7 @@ import boto3
 import json
 import os
 import requests
+import datetime as dt
 
 from common import *
 
@@ -28,11 +29,12 @@ logging.getLogger('botocore').setLevel(logging.WARNING)
 logging.getLogger('boto3').setLevel(logging.WARNING)
 logging.getLogger('urllib3').setLevel(logging.WARNING)
 
+
 org_details = get_org_account_details()
 
 # Lambda execution starts here
 def handler(event, context):
-    logger.debug("Received event: " + json.dumps(event, sort_keys=True))
+    logger.info("Received event: " + json.dumps(event, sort_keys=True))
 
     region = os.environ['AWS_REGION']
     service = 'es'
@@ -47,28 +49,46 @@ def handler(event, context):
     count = 0
 
     # Only grab the detail from the event. The other stuff is related to the eventbridge event wraper
-    for finding_document in event['detail']['findings']:
+    finding_document = event['detail']
 
-        product = finding_document['ProductArn'].split('/')[-1] # This is a more machine processable version
+    if event['source'] == "aws.inspector2":
+        if event["detail-type"] == "Inspector2 Coverage":
+            logger.warning(f"Got an Inspector2 Coverage event")
+            return(True)
+        index = "inspector2"
+        doc_id = f"{finding_document['findingArn']}"
+        if finding_document['awsAccountId'] in org_details:
+            finding_document['OrgInfo'] = org_details[finding_document['awsAccountId']]
 
-        if product != "securityhub":
-            index = index="securityhub_findings_" + product
+        date_format = "%b %d, %Y, %I:%M:%S %p" # not sure why inspector v2 is non-standard
+        keys_to_normalize = ['firstObservedAt', 'lastObservedAt', 'updatedAt' ]
+        for k in keys_to_normalize:
+            finding_document[k] = dt.datetime.strptime(finding_document[k], date_format).isoformat()
 
-            if finding_document['AwsAccountId'] in org_details:
-                finding_document['OrgInfo'] = org_details[finding_document['AwsAccountId']]
+    if event['source'] == "aws.access-analyzer":
+        index = "access-analyzer"
+        doc_id = f"{finding_document['findingArn']}"
+        if finding_document['awsAccountId'] in org_details:
+            finding_document['OrgInfo'] = org_details[finding_document['awsAccountId']]
 
-            doc_id = f"{finding_document['Id']}"
-            command = {"index": {"_index": index, "_id": doc_id}}
-            command_str = json.dumps(command, separators=(',', ':'), default=str)
-            document = json.dumps(finding_document, separators=(',', ':'), default=str)
-            bulk_ingest_body += f"{command_str}\n{document}\n"
-            count += 1
-            bulk_ingest_body += "\n"
+    if event['source'] == "aws.macie":
+        index = "macie"
+        doc_id = f"{finding_document['findingArn']}"
+        if finding_document['awsAccountId'] in org_details:
+            finding_document['OrgInfo'] = org_details[finding_document['awsAccountId']]
+
+
+    command = {"index": {"_index": index, "_id": doc_id}}
+    command_str = json.dumps(command, separators=(',', ':'), default=str)
+    document = json.dumps(finding_document, separators=(',', ':'), default=str)
+    bulk_ingest_body += f"{command_str}\n{document}\n"
+    count += 1
+    bulk_ingest_body += "\n"
 
     # Don't call ES if there is nothing to do.
     if count == 0:
         logger.warning("No objects to index.")
-        return(event)
+        return(True)
 
     try:
         # Now index the document
@@ -84,14 +104,15 @@ def handler(event, context):
             if response['errors'] is False:
                 return(True)  # all done here
 
-            # for item in response['items']:
-            #     if 'index' not in item:
-            #         logger.error(f"Item {item} was not of type index. Huh?")
-            #         continue
-            #     if item['index']['status'] != 201 and item['index']['status'] != 200:
-            #         logger.error(f"Bulk Ingest Failure: Index {item['index']['_index']} ID {item['index']['_id']} Status {item['index']['status']} - {item}")
-            #         # requeue_keys.append(process_requeue(item))
+            for item in response['items']:
+                if 'index' not in item:
+                    logger.error(f"Item {item} was not of type index. Huh?")
+                    continue
+                if item['index']['status'] != 201 and item['index']['status'] != 200:
+                    logger.error(f"Bulk Ingest Failure: Index {item['index']['_index']} ID {item['index']['_id']} Status {item['index']['status']} - {item}")
+                    # requeue_keys.append(process_requeue(item))
 
     except Exception as e:
         logger.critical(f"General Exception Indexing data: {e}")
         raise
+
