@@ -1,0 +1,430 @@
+# Copyright 2023 - Chris Farris - All Rights Reserved
+#
+
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Run Prowler across the entire org, and index findings in Elastic Search
+Transform: AWS::Serverless-2016-10-31
+
+
+Parameters:
+
+  pBucketName:
+    Description: Name of pre-existing Bucket to store findings and backups
+    Type: String
+
+  pAuditRoleName:
+    Description: Default name of the AssumeRole to assume into accounts
+    Type: String
+    Default: security-audit
+
+  pTemplateURL:
+    Description: URL to the Transformed Template this stack was deployed with (for promotion to another environment)
+    Type: String
+
+  #
+  # ElasticSearch Related Params
+  #
+  pDomainName:
+    Description: Name of the Elasticsearch Domain
+    Type: String
+    MaxLength: 28
+
+  pClusterInstanceType:
+    Type: String
+    Description: Size of the ES Cluster
+    Default: t2.small.elasticsearch
+    ConstraintDescription: Must be a valid Elasticsearch Service InstanceType (https://aws.amazon.com/elasticsearch-service/pricing/)
+
+  pClusterInstanceCount:
+    Type: Number
+    Description: Cluster Instance Count
+    Default: 1
+
+  pClusterEncryption:
+    Type: String
+    Description: Enable Encryption for the Elasticsearch Cluster
+    Default: False
+    AllowedValues:
+      - True
+      - False
+
+  pEngineVersion:
+    Type: String
+    Description: What version of OpenSearch you want to use
+    Default: "OpenSearch_2.7"
+
+  pOpenSearchAdminPassword:
+    Description: Initial Password for the OpenSearch Dashboard
+    Type: String
+    NoEcho: true
+
+Globals:
+  Function:
+    Runtime: python3.9
+    MemorySize: 2048
+    Timeout: 300
+    Environment:
+      Variables:
+          ROLE_SESSION_NAME: !Ref AWS::StackName
+          BUCKET: !Ref pBucketName
+          ROLE_NAME: !Ref pAuditRoleName
+          LOG_LEVEL: 'INFO'
+
+
+Conditions:
+  EncryptionEnabled: !Equals [ !Ref pClusterEncryption, True ]
+
+Resources:
+
+  #
+  # OpenSearchService Cluster
+  #
+  ProwlerESDomain:
+    Type: AWS::OpenSearchService::Domain
+    Properties:
+      AdvancedSecurityOptions:
+        Enabled: true
+        InternalUserDatabaseEnabled: true
+        MasterUserOptions:
+          MasterUserName: admin
+          MasterUserPassword: !Ref pOpenSearchAdminPassword
+      AccessPolicies:
+        Version: 2012-10-17
+        Statement:
+          - Effect: "Allow"
+            Principal:
+              AWS: "*"
+            Action: "es:*"
+            Resource: !Sub "arn:aws:es:${AWS::Region}:${AWS::AccountId}:domain/${pDomainName}/*"
+      DomainName: !Ref pDomainName
+      EBSOptions:
+        EBSEnabled: true
+        Iops: 0
+        VolumeSize: 20
+        VolumeType: "gp2"
+      ClusterConfig:
+        # FIXME
+        DedicatedMasterEnabled: false
+        InstanceCount: !Ref pClusterInstanceCount
+        ZoneAwarenessEnabled: false
+        InstanceType: !Ref pClusterInstanceType
+      EngineVersion: !Ref pEngineVersion
+      # Encryption at rest is not supported with t2.small.elasticsearch
+      EncryptionAtRestOptions:
+        Enabled: !Ref pClusterEncryption
+        KmsKeyId:
+          Fn::If:
+          - EncryptionEnabled
+          - Ref: SearchClusterKMSKey
+          - Ref: AWS::NoValue
+      NodeToNodeEncryptionOptions:
+        Enabled: !Ref pClusterEncryption
+      LogPublishingOptions:
+        ES_APPLICATION_LOGS:
+          CloudWatchLogsLogGroupArn: !GetAtt ApplicationLogGroup.Arn
+          Enabled: true
+        SEARCH_SLOW_LOGS:
+          CloudWatchLogsLogGroupArn: !GetAtt SearchSlowLogGroup.Arn
+          Enabled: true
+        INDEX_SLOW_LOGS:
+          CloudWatchLogsLogGroupArn: !GetAtt IndexSlowLogGroup.Arn
+          Enabled: true
+        AUDIT_LOGS:
+          CloudWatchLogsLogGroupArn: !GetAtt AuditLogGroup.Arn
+          Enabled: true
+      SnapshotOptions:
+        AutomatedSnapshotStartHour: "0"
+      DomainEndpointOptions:
+        EnforceHTTPS: True
+        TLSSecurityPolicy: Policy-Min-TLS-1-2-2019-07
+
+  SearchClusterKMSKey:
+    Type: AWS::KMS::Key
+    # Condition: EncryptionEnabled
+    Properties:
+      Description: !Sub KMS Key in ${AWS::StackName}
+      Enabled: True
+      EnableKeyRotation: False
+      KeyPolicy:
+        Version: "2012-10-17"
+        Id: "allow-iam"
+        Statement:
+          - Sid: "Allow everyone use of the key"
+            Effect: "Allow"
+            Principal:
+              AWS: !Sub "arn:aws:iam::${AWS::AccountId}:root"
+            Action:
+              - "kms:*"
+            Resource: "*"
+          - Sid: "Allow s3 use of the key"
+            Effect: "Allow"
+            Principal:
+              Service:
+                - "s3.amazonaws.com"
+                - "sqs.amazonaws.com"
+                - "lambda.amazonaws.com"
+                - !Sub "logs.${AWS::Region}.amazonaws.com"
+                # Added per https://aws.amazon.com/premiumsupport/knowledge-center/sns-topic-sqs-queue-sse-cmk-policy/ to support the S3 Event->SNS->SQS workflow
+                - "sns.amazonaws.com"
+            Action:
+              - "kms:GenerateDataKey*"
+              - "kms:Encrypt*"
+              - "kms:Decrypt*"
+              - "kms:ReEncrypt*"
+              - "kms:Describe*"
+            Resource: "*"
+
+  SearchClusterKMSKeyAlias:
+    Type: AWS::KMS::Alias
+    # Condition: EncryptionEnabled
+    Properties:
+      AliasName: !Sub "alias/${AWS::StackName}-kmskey"
+      TargetKeyId: !Ref SearchClusterKMSKey
+
+  ApplicationLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      KmsKeyId: !If
+        - EncryptionEnabled
+        - !GetAtt SearchClusterKMSKey.Arn
+        - !Ref AWS::NoValue
+      LogGroupName: !Sub ${AWS::StackName}-application-logs
+      RetentionInDays: 180
+
+  AuditLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      KmsKeyId: !If
+        - EncryptionEnabled
+        - !GetAtt SearchClusterKMSKey.Arn
+        - !Ref AWS::NoValue
+      LogGroupName: !Sub ${AWS::StackName}-audit-logs
+      RetentionInDays: 180
+
+  SearchSlowLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      KmsKeyId: !If
+        - EncryptionEnabled
+        - !GetAtt SearchClusterKMSKey.Arn
+        - !Ref AWS::NoValue
+      LogGroupName: !Sub ${AWS::StackName}-slow-logs
+      RetentionInDays: 180
+
+  IndexSlowLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      KmsKeyId: !If
+        - EncryptionEnabled
+        - !GetAtt SearchClusterKMSKey.Arn
+        - !Ref AWS::NoValue
+      LogGroupName: !Sub ${AWS::StackName}-index-slow-logs
+      RetentionInDays: 180
+
+  OpenSearchLogPolicy:
+    Type: AWS::Logs::ResourcePolicy
+    Properties:
+      PolicyName: !Sub "${AWS::StackName}-LogPolicy"
+      PolicyDocument: !Sub >
+        {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Sid": "",
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "es.amazonaws.com"
+              },
+              "Action": [
+                "logs:PutLogEvents",
+                "logs:CreateLogStream"
+              ],
+              "Resource": [
+                "${ApplicationLogGroup.Arn}",
+                "${SearchSlowLogGroup.Arn}",
+                "${IndexSlowLogGroup.Arn}",
+                "${AuditLogGroup.Arn}"
+              ]
+            }
+          ]
+        }
+
+  ESSnapshotRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: es.amazonaws.com
+            Action:
+              - "sts:AssumeRole"
+      Policies:
+      - PolicyName: S3Access
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Action:
+            - s3:ListBucket
+            - s3:GetObject
+            - s3:PutObject
+            - s3:DeleteObject
+            Effect: Allow
+            Resource:
+              - !Sub "arn:aws:s3:::${pBucketName}/*"
+              - !Sub "arn:aws:s3:::${pBucketName}"
+          - Action:
+            - s3:ListAllMyBuckets
+            - s3:GetBucketLocation
+            Effect: Allow
+            Resource: '*'
+
+
+  #
+  # Lambda Functions
+  #
+  LambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service:
+            - lambda.amazonaws.com
+          Action:
+          - sts:AssumeRole
+      Path: /
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AWSOrganizationsReadOnlyAccess
+      Policies:
+      - PolicyName: S3Access
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Action:
+            - s3:*
+            Effect: Allow
+            Resource:
+              - !Sub 'arn:aws:s3:::${pBucketName}/*'
+              - !Sub 'arn:aws:s3:::${pBucketName}'
+          - Action:
+            - s3:ListAllMyBuckets
+            - s3:GetBucketLocation
+            Effect: Allow
+            Resource: '*'
+      - PolicyName: LambdaLogging
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Resource: '*'
+            Action:
+            - logs:*
+            Effect: Allow
+      - PolicyName: AssumeCrossAccountRole
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Effect: "Allow"
+            Action:
+            - sts:AssumeRole
+            Resource: !Sub "arn:aws:iam::*:role/${pAuditRoleName}"
+      - PolicyName: IndexData
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Resource: !Sub "${ProwlerESDomain.DomainArn}/*"
+            Action:
+            - es:*
+            Effect: Allow
+      - PolicyName: KMSDecrypt
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Resource:
+            - !If
+              - EncryptionEnabled
+              - !GetAtt SearchClusterKMSKey.Arn
+              - !Sub "arn:aws:kms:us-east-1:${AWS::AccountId}:key/thiskeydoesntexist"
+            Action:
+            - kms:GenerateDataKey*
+            - kms:Decrypt
+            Effect: Allow
+
+  ProcessSecHubFindingsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub "${AWS::StackName}-process-sechub"
+      Description: Process Security Hub Findings pushed to EventBus
+      Handler: process_sechub.handler
+      Role: !GetAtt LambdaRole.Arn
+      CodeUri: ../lambda
+      ReservedConcurrentExecutions: 10
+      Events:
+        InspectorEventBridge:
+            Type: EventBridgeRule
+            Properties:
+              # DeadLetterConfig: DeadLetterConfig
+              # EventBusName: String
+              # Input: String
+              # InputPath: String
+              # Name: String
+              Pattern:
+                source:
+                  - aws.securityhub
+              # RetryPolicy: RetryPolicy
+              State: ENABLED
+              # Target: Target
+      Environment:
+        Variables:
+          ES_DOMAIN_ENDPOINT: !GetAtt ProwlerESDomain.DomainEndpoint
+
+  ProcessSecHubFindingsFunctionErrorAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub ${ProcessSecHubFindingsFunction}-LambdaErrors
+      AlarmDescription: "Alarm if lambda errors out"
+      Namespace: "AWS/Lambda"
+      MetricName: "Errors"
+      Dimensions:
+      - Name: "FunctionName"
+        Value: !Ref ProcessSecHubFindingsFunction
+      Statistic: "Sum"
+      ComparisonOperator: "GreaterThanThreshold"
+      Threshold: 0
+      EvaluationPeriods: 1
+      Period: 60
+      TreatMissingData: "ignore"
+      # AlarmActions:
+      #   - !Ref SlackSNSTopic
+
+
+Outputs:
+  TemplateURL:
+    Description: URL to the Transformed Template this stack was deployed with (for promotion to another environment)
+    Value: !Ref pTemplateURL
+
+  DomainName:
+    Value: !Ref pDomainName
+
+  DomainEndpoint:
+    Value: !Sub "https://${ProwlerESDomain.DomainEndpoint}"
+
+  SnapshotRoleArn:
+    Value: !GetAtt ESSnapshotRole.Arn
+
+  SnapshotBucketName:
+    Value: !Ref pBucketName
+
+  ESDomainDomainArn:
+    Value: !GetAtt ProwlerESDomain.DomainArn
+
+  ESDomainEndpoint:
+    Value: !GetAtt ProwlerESDomain.DomainEndpoint
+
+
+
+
+# EOF
