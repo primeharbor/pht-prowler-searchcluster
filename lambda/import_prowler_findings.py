@@ -13,15 +13,14 @@
 # limitations under the License.
 
 from botocore.exceptions import ClientError
-from dateutil import tz
 from requests_aws4auth import AWS4Auth
 import boto3
-import datetime as dt
 import json
 import os
-import re
 import requests
-import time
+import datetime as dt
+
+from common import *
 
 import logging
 logger = logging.getLogger()

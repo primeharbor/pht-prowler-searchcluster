@@ -13,10 +13,13 @@
 # limitations under the License.
 
 from botocore.exceptions import ClientError
-from urllib.parse import unquote
+from requests_aws4auth import AWS4Auth
 import boto3
 import json
 import os
+import requests
+
+from common import *
 
 import logging
 logger = logging.getLogger()
@@ -64,43 +67,5 @@ def handler(event, context):
                 response = sqs_client.send_message(QueueUrl=queue_url, MessageBody=json.dumps(f, default=str))
 
 
-def get_object(bucket, obj_key):
-    '''get the object to index from S3 and return the parsed json'''
-    s3 = boto3.client('s3')
-    try:
-        response = s3.get_object(
-            Bucket=bucket,
-            Key=unquote(obj_key)
-        )
-        return(json.loads(response['Body'].read()))
-    except ClientError as e:
-        if e.response['Error']['Code'] == 'NoSuchKey':
-            logger.error("Unable to find resource s3://{}/{}".format(bucket, obj_key))
-        else:
-            logger.error("Error getting resource s3://{}/{}: {}".format(bucket, obj_key, e))
-        return(None)
-
-def get_org_account_details():
-    org_client = boto3.client('organizations')
-    try:
-        account_list = []
-        response = org_client.list_accounts(MaxResults=20)
-        while 'NextToken' in response:
-            account_list = account_list + response['Accounts']
-            response = org_client.list_accounts(MaxResults=20, NextToken=response['NextToken'])
-        account_list = account_list + response['Accounts']
-
-        # Make it a dictionary
-        output = {}
-        for a in account_list:
-            output[a['Id']] = a
-        return(output)
-    except ClientError as e:
-        if e.response['Error']['Code'] == 'AWSOrganizationsNotInUseException':
-            logger.error(f"This is not part of an AWS Organization")
-        elif e.response['Error']['Code'] == 'AccessDeniedException':
-            logger.error(f"This is not an Organization Management or Delegated Admin Account")
-        else:
-            raise
 
 
