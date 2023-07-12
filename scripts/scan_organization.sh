@@ -37,16 +37,18 @@ while read line ; do
 	prowler aws -M csv json json-asff html  -b -z  \
 		--excluded-services route53 cloudwatch  \
 		-e $EXCLUDE_CHECKS \
+		--log-file prowler-logs-${ACCOUNT_ID}-${TODAY}.log \
 		-F prowler-${ACCOUNT_ID}-${TODAY} --log-level ERROR \
 		-R arn:aws:iam::$ACCOUNT_ID:role/$ROLENAME \
 		-O arn:aws:iam::$PAYER_ID:role/$ROLENAME \
-		-D ${OUTPUT_BUCKET} -o prowler-output 2> prowler.err
+		-D ${OUTPUT_BUCKET} -o prowler-output 2> prowler-errors-${ACCOUNT_ID}-${TODAY}.log
 	RC=$?
 
 	END=`date +%s`
 	DUR=`expr $END - $START`
 
-	echo "Prowler Exited with error code $RC after $DUR seconds"
-	logger "Prowler Exited with error code $RC after $DUR seconds"
+	aws s3 cp prowler-logs-${ACCOUNT_ID}-${TODAY}.log s3://${OUTPUT_BUCKET}/prowler-logs/
+	aws s3 cp prowler-errors-${ACCOUNT_ID}-${TODAY}.log s3://${OUTPUT_BUCKET}/prowler-logs/
+	echo "Prowler Exited for $ACCOUNT_ID with error code $RC after $DUR seconds"
 
 done < <(aws organizations list-accounts --query Accounts[].[Id,Status] --output text | grep ACTIVE )
