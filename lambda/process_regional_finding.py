@@ -65,18 +65,27 @@ def handler(event, context):
         for k in keys_to_normalize:
             finding_document[k] = dt.datetime.strptime(finding_document[k], date_format).isoformat()
 
-    if event['source'] == "aws.access-analyzer":
+    elif event['source'] == "aws.access-analyzer":
         index = "access-analyzer"
         doc_id = f"{finding_document['findingArn']}"
         if finding_document['awsAccountId'] in org_details:
             finding_document['OrgInfo'] = org_details[finding_document['awsAccountId']]
 
-    if event['source'] == "aws.macie":
+    elif event['source'] == "aws.macie":
         index = "macie"
         doc_id = f"{finding_document['findingArn']}"
         if finding_document['awsAccountId'] in org_details:
             finding_document['OrgInfo'] = org_details[finding_document['awsAccountId']]
 
+    elif event['source'] == "aws.guardduty":
+        index = "guardduty2"
+        doc_id = f"{finding_document['id']}"
+        if finding_document['accountId'] in org_details:
+            finding_document['OrgInfo'] = org_details[finding_document['accountId']]
+
+    else:
+        logger.warning(f"Got an unexpected Source: {event['source']}. Aborting")
+        return(True)
 
     command = {"index": {"_index": index, "_id": doc_id}}
     command_str = json.dumps(command, separators=(',', ':'), default=str)
