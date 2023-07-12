@@ -71,8 +71,37 @@ def main(args, logger):
             exit(1)
         restore_snapshot(config, args, awsauth)
 
+    elif args.action == "load":
+        if not args.file_name:
+            print("No file name specified. Aborting....")
+            exit(1)
+        load_file(config, args, awsauth)
+
+
     else:
         print("Invalid Action")
+
+
+def load_file(config, args, awsauth):
+    url = f"{config['DomainEndpoint']}/_dashboards/api/saved_objects/_import?overwrite=true"
+    headers = {'osd-xsrf': 'true'}
+
+    try:
+        if os.path.exists(args.file_name):
+            with open(args.file_name, 'rb') as fd:
+                r = requests.post(url=url, files={'file': fd}, headers=headers, auth=awsauth)
+                logger.info(r.text)
+
+    except Exception as e:
+        print(f"Error: {e}")
+        exit(1)
+
+    if r.status_code == 200:
+        print("Success")
+        exit(0)
+    else:
+        print(f"Error {r.status_code}: {r.text}")
+        exit(1)
 
 
 def take_snapshot(config, args, awsauth):
@@ -234,10 +263,12 @@ def do_args():
     parser.add_argument("--bucket", help="Override Snapshot Bucket")
     parser.add_argument("--role-arn", help="Override Snapshot Role Arn")
 
-    parser.add_argument("--action", help="Action to take", required=True, choices=['register', 'list', 'status', 'take', 'restore'])
+    parser.add_argument("--action", help="Action to take", required=True, choices=['register', 'list', 'status', 'take', 'restore', 'load'])
     parser.add_argument("--snapshot-name", help="Snapshot name")
     parser.add_argument("--snapshot-repo", help="Snapshot Repository Name", default="opensearch-snapshots")
     parser.add_argument("--snapshot-prefix", help="S3 Prefix for Snapshot Repository")
+
+    parser.add_argument("--file-name", help="filename to load")
 
     args = parser.parse_args()
 
