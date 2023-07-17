@@ -38,6 +38,16 @@ Parameters:
       - DISABLED
       - ENABLED
 
+  pProwlerMetricNamespace:
+    Type: String
+    Description: Name of the CloudWatch Metrics Namespace to create Log metric filters
+    Default: prowler
+
+  pLogGroupName:
+    Type: String
+    Description: Name of LogGroup where Prowler Container will write logs
+    Default: prowler
+
   #
   # Fargate Related Params
   #
@@ -88,7 +98,7 @@ Globals:
   Function:
     Runtime: python3.9
     MemorySize: 2048
-    Timeout: 300
+
     Environment:
       Variables:
           ROLE_SESSION_NAME: !Ref AWS::StackName
@@ -192,7 +202,7 @@ Resources:
           LogConfiguration:
               LogDriver: awslogs
               Options:
-                awslogs-group: !Sub ${pServiceName}
+                awslogs-group: !Ref pLogGroupName
                 awslogs-region: !Ref AWS::Region
                 awslogs-create-group: true
                 awslogs-stream-prefix: !Sub "${pServiceName}-${pImageVersion}"
@@ -417,6 +427,7 @@ Resources:
       Handler: import_prowler_findings.handler
       Role: !GetAtt LambdaRole.Arn
       CodeUri: ../lambda
+      Timeout: 60
       # TODO - Set Concurrency here
       Events:
         SQSIngest:
@@ -438,6 +449,7 @@ Resources:
       Handler: process_prowler_file.handler
       Role: !GetAtt LambdaRole.Arn
       CodeUri: ../lambda
+      Timeout: 600
       Events:
         SQSIngest:
           Type: SQS
@@ -593,6 +605,51 @@ Resources:
       # AlarmActions:
       #   - !Ref SlackSNSTopic
 
+  # ProwlerDurationMetricFilter:
+  #   Type: AWS::Logs::MetricFilter
+  #   Properties:
+  #     LogGroupName: !Ref pLogGroupName
+  #     FilterPattern: '[timestamp, logLevel, message = "Prowler Exited for", accountId = Number, "with error code", errorCode = Number, "after", durationSeconds = Number, "seconds"]'
+  #     MetricTransformations:
+  #       - MetricValue: "durationSeconds"
+  #         MetricNamespace: !Ref pProwlerMetricNamespace
+  #         MetricName: "ProwlerDuration"
+
+
+  SuccessfulProwlerRunMetricFilter:
+    Type: AWS::Logs::MetricFilter
+    Properties:
+      LogGroupName: !Ref pLogGroupName
+      FilterPattern: '"Prowler Exited" "with error code 0"'
+      MetricTransformations:
+      - MetricNamespace: !Ref pProwlerMetricNamespace
+        MetricName: successful_prowler_runs
+        MetricValue: '1'
+
+  FailedProwlerRunMetricFilter:
+    Type: AWS::Logs::MetricFilter
+    Properties:
+      LogGroupName: !Ref pLogGroupName
+      FilterPattern: '"Prowler Exited" -"with error code 0"'
+      MetricTransformations:
+      - MetricNamespace: !Ref pProwlerMetricNamespace
+        MetricName: failed_prowler_runs
+        MetricValue: '1'
+
+  FailedProwlerAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: FailedProwlerRun
+      AlarmDescription: Alarms Prowler exits non-0 for an account.
+      # AlarmActions:
+      MetricName: failed_prowler_runs
+      Namespace: !Ref pProwlerMetricNamespace
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      EvaluationPeriods: '1'
+      Period: '300'
+      Statistic: Sum
+      Threshold: '1'
+      TreatMissingData: notBreaching
 
 Outputs:
   TemplateURL:
