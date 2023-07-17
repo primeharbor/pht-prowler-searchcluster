@@ -54,10 +54,14 @@ def get_org_account_details():
             response = org_client.list_accounts(MaxResults=20, NextToken=response['NextToken'])
         account_list = account_list + response['Accounts']
 
-        # Make it a dictionary
+        # Make it a dictionary & fetch the tags
         output = {}
         for a in account_list:
             output[a['Id']] = a
+            output[a['Id']]['Tags'] = {}
+            tags_response = org_client.list_tags_for_resource(ResourceId=a['Id'])
+            for t in tags_response['Tags']:
+                output[a['Id']]['Tags'][t['Key']] = t['Value']
         return(output)
     except ClientError as e:
         if e.response['Error']['Code'] == 'AWSOrganizationsNotInUseException':
