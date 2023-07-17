@@ -27,6 +27,8 @@ lambda/elasticsearch
 lambda/six.py
 lambda/idna
 lambda/urllib3
+lambda/dateutil
+lambda/opensearchpy
 
 
 # Created by https://www.gitignore.io/api/osx,python
