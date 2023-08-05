@@ -15,3 +15,4 @@
 requests
 requests_aws4auth
 elasticsearch
+opensearch-py
