@@ -1,4 +1,17 @@
 #!/bin/bash
+# Copyright 2023 Chris Farris <chris@primeharbor.com>
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 
 if [[ -z "$ROLENAME" ]] ; then
 	echo "ROLENAME not defined. Aborting..."
@@ -17,9 +30,21 @@ fi
 
 ulimit -n 4096
 
-EXCLUDE_CHECKS="accessanalyzer_enabled accessanalyzer_enabled_without_findings cloudformation_stacks_termination_protection_enabled cloudtrail_kms_encryption_enabled ec2_networkacl_allow_ingress_any_port ec2_networkacl_allow_ingress_tcp_port_22 ec2_networkacl_allow_ingress_tcp_port_3389 iam_role_cross_service_confused_deputy_prevention iam_root_hardware_mfa_enabled s3_bucket_no_mfa_delete s3_bucket_server_access_logging_enabled s3_account_level_public_access_blocks iam_policy_allows_privilege_escalation inspector2_findings_exist shield_advanced_protection_in_route53_hosted_zones awslambda_function_no_secrets_in_code"
+REGIONS="ap-south-1 eu-north-1 eu-west-3 eu-west-2 eu-west-1 ap-northeast-3 ap-northeast-2 ap-northeast-1 ca-central-1 sa-east-1 ap-southeast-1 ap-southeast-2 eu-central-1 us-east-1 us-east-2 us-west-1 us-west-2"
 
-REGIONS="ap-south-1 eu-north-1 eu-west-3 eu-west-2 eu-west-1 ap-northeast-3 ap-northeast-2 ap-northeast-1     ca-central-1 sa-east-1 ap-southeast-1 ap-southeast-2 eu-central-1 us-east-1 us-east-2 us-west-1 us-west-2"
+
+# Slack Support
+SLACK=" --slack "
+if [[ -z "$SLACK_API_TOKEN" ]] ; then
+	SLACK=""
+fi
+if [[ -z "$SLACK_CHANNEL_ID" ]] ; then
+	SLACK=""
+fi
+
+# Download the list of checks from S3
+aws s3 cp s3://${OUTPUT_BUCKET}/checks.json .
+aws s3 cp s3://${OUTPUT_BUCKET}/config.yaml .
 
 TODAY=`date +%Y-%m-%d`
 
@@ -30,16 +55,14 @@ while read line ; do
 	ACCOUNT_ID=`echo $line | awk '{print $1}'`
 	ACCOUNT_STATUS=`echo $line | awk '{print $2}'`
 
-	if [ -f prowler-output/prowler-${ACCOUNT_ID}-${TODAY}.csv ] ; then
+	if [ -f prowler-output/prowler-${ACCOUNT_ID}-${TODAY}.json ] ; then
 		echo "$ACCOUNT_ID was already scanned on $TODAY"
 		continue
 	fi
 
 	echo "Starting Scan of account $ACCOUNT_ID at epoch timestamp $START."
-	prowler aws -M csv json json-asff html  -b -z  \
-		--excluded-services route53 cloudwatch  \
-		-e $EXCLUDE_CHECKS \
-		-f $REGIONS \
+	prowler aws -M csv json json-asff html -b -z $SLACK \
+		--checks-file checks.json -f $REGIONS \
 		--log-file prowler-logs-${ACCOUNT_ID}-${TODAY}.log \
 		-F prowler-${ACCOUNT_ID}-${TODAY} --log-level ERROR \
 		-R arn:aws:iam::$ACCOUNT_ID:role/$ROLENAME \
