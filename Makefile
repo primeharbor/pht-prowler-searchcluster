@@ -38,6 +38,9 @@ endif
 build:
 	docker build -t $(IMAGENAME) .
 
+force-build:
+	docker build --no-cache -t $(IMAGENAME) .
+
 run: stop
 	docker run -it -v ./prowler-output:/home/prowler/prowler-output \
 		-e AWS_DEFAULT_REGION -e AWS_SECRET_ACCESS_KEY -e AWS_ACCESS_KEY_ID -e AWS_SESSION_TOKEN \
@@ -56,7 +59,7 @@ stop:
 repo:
 	aws ecr create-repository --repository-name $(IMAGENAME)
 
-push: build
+push:
 ifndef IMAGE_ID
 	$(eval IMAGE_ID := $(shell docker images $(IMAGENAME) --format "{{.ID}}" ))
 endif
@@ -65,6 +68,7 @@ endif
 	docker tag $(IMAGE_ID) $(AWS_ACCOUNT_ID).dkr.ecr.$(AWS_DEFAULT_REGION).amazonaws.com/$(IMAGENAME):$(version)
 	docker push $(AWS_ACCOUNT_ID).dkr.ecr.$(AWS_DEFAULT_REGION).amazonaws.com/$(IMAGENAME):$(version)
 
+container: build push
 
 #
 # General Lambda / CFn targets
@@ -116,5 +120,11 @@ endif
 	cft-deploy -m cloudformation/$(FINDINGS_MANIFEST) --template-url $(FINDINGS_TEMPLATE_URL) pTemplateURL=$(FINDINGS_TEMPLATE_URL) --force
 
 
+#
+# Push Configs
+#
+push-config:
+	@aws s3 cp $(CONFIG_FILE) s3://$(OUTPUT_BUCKET)/config.yaml
+	@aws s3 cp $(CHECKS_FILE) s3://$(OUTPUT_BUCKET)/checks.json
 
 # EOF
