@@ -1,0 +1,22 @@
+{
+  "mappings": {
+    "properties": {
+
+      "analyzedAt": {
+        "format": "yyyy-MM-dd HH:mm:ss.SSSSSS",
+        "type": "date"
+      },
+      "createdAt": {
+        "format": "yyyy-MM-dd HH:mm:ss.SSSSSS",
+        "type": "date"
+      },
+      "updatedAt": {
+        "format": "yyyy-MM-dd HH:mm:ss.SSSSSS",
+        "type": "date"
+      }
+    },
+    "_meta": {
+      "mapping_version": "2023-07-14"
+    }
+  }
+}
