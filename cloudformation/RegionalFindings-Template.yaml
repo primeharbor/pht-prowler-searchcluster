@@ -163,10 +163,10 @@ Resources:
               State: ENABLED
               EventPattern:
                 source:
-                  - aws.access-analyzer
-                  - aws.macie
-                  - aws.inspector2
-                  - aws.guardduty
+                  - "aws.access-analyzer"
+                  - "aws.macie"
+                  - "aws.inspector2"
+                  - "aws.guardduty"
               Targets:
                 - Arn: !Ref pEventBusDestinationArn
                   Id: SecurityEvent
@@ -298,10 +298,10 @@ Resources:
               EventBusName: !Ref EventBus
               Pattern:
                 source:
-                - aws.access-analyzer
-                - aws.macie
-                - aws.inspector2
-                - aws.guardduty
+                - "aws.access-analyzer"
+                - "aws.macie"
+                - "aws.inspector2"
+                - "aws.guardduty"
               State: ENABLED
       Environment:
         Variables:

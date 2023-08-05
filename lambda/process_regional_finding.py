@@ -53,7 +53,10 @@ def handler(event, context):
 
     if event['source'] == "aws.inspector2":
         if event["detail-type"] == "Inspector2 Coverage":
-            logger.warning(f"Got an Inspector2 Coverage event")
+            logger.info(f"Got an Inspector2 Coverage event")
+            return(True)
+        if event["detail-type"] == "Inspector2 Scan":
+            logger.info(f"Got an Inspector2 Scan event")
             return(True)
         index = "inspector2"
         doc_id = f"{finding_document['findingArn']}"
@@ -67,18 +70,23 @@ def handler(event, context):
 
     elif event['source'] == "aws.access-analyzer":
         index = "access-analyzer"
-        doc_id = f"{finding_document['findingArn']}"
-        if finding_document['awsAccountId'] in org_details:
-            finding_document['OrgInfo'] = org_details[finding_document['awsAccountId']]
+        doc_id = f"{finding_document['id']}"
+        if finding_document['resourceOwnerAccount'] in org_details:
+            finding_document['OrgInfo'] = org_details[finding_document['resourceOwnerAccount']]
 
     elif event['source'] == "aws.macie":
-        index = "macie"
-        doc_id = f"{finding_document['findingArn']}"
-        if finding_document['awsAccountId'] in org_details:
-            finding_document['OrgInfo'] = org_details[finding_document['awsAccountId']]
+        if finding_document['category'] == "POLICY":
+            index = "macie_policy"
+        elif finding_document['category'] == "CLASSIFICATION":
+            index = "macie_classification"
+        else:
+            logger.warning(f"Got unknown macie category: {finding_document['category']}")
+        doc_id = f"{finding_document['id']}"
+        if finding_document['accountId'] in org_details:
+            finding_document['OrgInfo'] = org_details[finding_document['accountId']]
 
     elif event['source'] == "aws.guardduty":
-        index = "guardduty2"
+        index = "guardduty"
         doc_id = f"{finding_document['id']}"
         if finding_document['accountId'] in org_details:
             finding_document['OrgInfo'] = org_details[finding_document['accountId']]
