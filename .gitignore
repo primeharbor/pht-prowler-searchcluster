@@ -2,6 +2,7 @@
 # Generic places I've shoved things from a scratch/perspective
 Attic/
 Notes.md
+tmp/
 
 # Build-time crud
 *.zip
@@ -14,6 +15,9 @@ prowler
 prowler.err
 *.dist-info
 *.egg-info
+
+*-checks.json
+*-config.yaml
 
 lambda/bin
 lambda/certifi
