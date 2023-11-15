@@ -30,8 +30,9 @@ fi
 
 ulimit -n 4096
 
-REGIONS="ap-south-1 eu-north-1 eu-west-3 eu-west-2 eu-west-1 ap-northeast-3 ap-northeast-2 ap-northeast-1 ca-central-1 sa-east-1 ap-southeast-1 ap-southeast-2 eu-central-1 us-east-1 us-east-2 us-west-1 us-west-2"
-
+if [[ -z "$REGIONS" ]] ; then
+	REGIONS="ap-south-1 eu-north-1 eu-west-3 eu-west-2 eu-west-1 ap-northeast-3 ap-northeast-2 ap-northeast-1 ca-central-1 sa-east-1 ap-southeast-1 ap-southeast-2 eu-central-1 us-east-1 us-east-2 us-west-1 us-west-2"
+fi
 
 # Slack Support
 SLACK=" --slack "
@@ -40,6 +41,12 @@ if [[ -z "$SLACK_API_TOKEN" ]] ; then
 fi
 if [[ -z "$SLACK_CHANNEL_ID" ]] ; then
 	SLACK=""
+fi
+
+if [[ ! -z "$SECURITY_HUB" ]] ; then
+	if [[ $SECURITY_HUB -eq 1 ]] ; then
+		SECURITY_HUB_FLAG=" -S "
+	fi
 fi
 
 # Download the list of checks from S3
@@ -61,7 +68,7 @@ while read line ; do
 	fi
 
 	echo "Starting Scan of account $ACCOUNT_ID at epoch timestamp $START."
-	prowler aws -M csv json json-asff html -b -z $SLACK \
+	prowler aws -M csv json json-asff html -b -z $SLACK $SECURITY_HUB_FLAG \
 		--checks-file checks.json -f $REGIONS \
 		--log-file prowler-logs-${ACCOUNT_ID}-${TODAY}.log \
 		-F prowler-${ACCOUNT_ID}-${TODAY} --log-level ERROR \
