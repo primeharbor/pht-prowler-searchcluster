@@ -40,6 +40,16 @@ Parameters:
     Description: Cluster Instance Count
     Default: 1
 
+  pVolumeSize:
+    Type: Number
+    Description: Size of each instance disk in GB
+    Default: 100
+
+  pVolumeIOPS:
+    Type: Number
+    Description: IOPS for instance disk. Must be greater than 3000
+    Default: 3000
+
   pClusterEncryption:
     Type: String
     Description: Enable Encryption for the Elasticsearch Cluster
@@ -99,9 +109,9 @@ Resources:
       DomainName: !Ref pDomainName
       EBSOptions:
         EBSEnabled: true
-        Iops: 0
-        VolumeSize: 20
-        VolumeType: "gp2"
+        Iops: !Ref pVolumeIOPS
+        VolumeSize: !Ref pVolumeSize
+        VolumeType: "gp3"
       ClusterConfig:
         # FIXME
         DedicatedMasterEnabled: false
