@@ -1,10 +1,20 @@
-# Copyright 2023 - Chris Farris - All Rights Reserved
+# Copyright 2021-2023 Chris Farris <chrisf@primeharbor.com>
 #
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 
 AWSTemplateFormatVersion: '2010-09-09'
-Description: Run Prowler across the entire org, and index findings in Elastic Search
+Description: Create an OpenSearch Cluster for Prowler and Security Hub
 Transform: AWS::Serverless-2016-10-31
-
 
 Parameters:
 
@@ -12,17 +22,12 @@ Parameters:
     Description: Name of pre-existing Bucket to store findings and backups
     Type: String
 
-  pAuditRoleName:
-    Description: Default name of the AssumeRole to assume into accounts
-    Type: String
-    Default: security-audit
-
   pTemplateURL:
     Description: URL to the Transformed Template this stack was deployed with (for promotion to another environment)
     Type: String
 
   #
-  # ElasticSearch Related Params
+  # OpenSearch Related Params
   #
   pDomainName:
     Description: Name of the Elasticsearch Domain
@@ -43,7 +48,7 @@ Parameters:
   pVolumeSize:
     Type: Number
     Description: Size of each instance disk in GB
-    Default: 100
+    Default: 30
 
   pVolumeIOPS:
     Type: Number
@@ -67,18 +72,6 @@ Parameters:
     Description: Initial Password for the OpenSearch Dashboard
     Type: String
     NoEcho: true
-
-Globals:
-  Function:
-    Runtime: python3.9
-    MemorySize: 2048
-    Timeout: 300
-    Environment:
-      Variables:
-          ROLE_SESSION_NAME: !Ref AWS::StackName
-          BUCKET: !Ref pBucketName
-          ROLE_NAME: !Ref pAuditRoleName
-          LOG_LEVEL: 'INFO'
 
 
 Conditions:
@@ -289,127 +282,6 @@ Resources:
             - s3:GetBucketLocation
             Effect: Allow
             Resource: '*'
-
-
-  #
-  # Lambda Functions
-  #
-  LambdaRole:
-    Type: AWS::IAM::Role
-    Properties:
-      AssumeRolePolicyDocument:
-        Version: '2012-10-17'
-        Statement:
-        - Effect: Allow
-          Principal:
-            Service:
-            - lambda.amazonaws.com
-          Action:
-          - sts:AssumeRole
-      Path: /
-      ManagedPolicyArns:
-        - arn:aws:iam::aws:policy/AWSOrganizationsReadOnlyAccess
-      Policies:
-      - PolicyName: S3Access
-        PolicyDocument:
-          Version: '2012-10-17'
-          Statement:
-          - Action:
-            - s3:*
-            Effect: Allow
-            Resource:
-              - !Sub 'arn:aws:s3:::${pBucketName}/*'
-              - !Sub 'arn:aws:s3:::${pBucketName}'
-          - Action:
-            - s3:ListAllMyBuckets
-            - s3:GetBucketLocation
-            Effect: Allow
-            Resource: '*'
-      - PolicyName: LambdaLogging
-        PolicyDocument:
-          Version: '2012-10-17'
-          Statement:
-          - Resource: '*'
-            Action:
-            - logs:*
-            Effect: Allow
-      - PolicyName: AssumeCrossAccountRole
-        PolicyDocument:
-          Version: '2012-10-17'
-          Statement:
-          - Effect: "Allow"
-            Action:
-            - sts:AssumeRole
-            Resource: !Sub "arn:aws:iam::*:role/${pAuditRoleName}"
-      - PolicyName: IndexData
-        PolicyDocument:
-          Version: '2012-10-17'
-          Statement:
-          - Resource: !Sub "${ProwlerESDomain.DomainArn}/*"
-            Action:
-            - es:*
-            Effect: Allow
-      - PolicyName: KMSDecrypt
-        PolicyDocument:
-          Version: '2012-10-17'
-          Statement:
-          - Resource:
-            - !If
-              - EncryptionEnabled
-              - !GetAtt SearchClusterKMSKey.Arn
-              - !Sub "arn:aws:kms:us-east-1:${AWS::AccountId}:key/thiskeydoesntexist"
-            Action:
-            - kms:GenerateDataKey*
-            - kms:Decrypt
-            Effect: Allow
-
-  ProcessSecHubFindingsFunction:
-    Type: AWS::Serverless::Function
-    Properties:
-      FunctionName: !Sub "${AWS::StackName}-process-sechub"
-      Description: Process Security Hub Findings pushed to EventBus
-      Handler: process_sechub.handler
-      Role: !GetAtt LambdaRole.Arn
-      CodeUri: ../lambda
-      ReservedConcurrentExecutions: 10
-      Events:
-        InspectorEventBridge:
-            Type: EventBridgeRule
-            Properties:
-              # DeadLetterConfig: DeadLetterConfig
-              # EventBusName: String
-              # Input: String
-              # InputPath: String
-              # Name: String
-              Pattern:
-                source:
-                  - aws.securityhub
-              # RetryPolicy: RetryPolicy
-              State: ENABLED
-              # Target: Target
-      Environment:
-        Variables:
-          ES_DOMAIN_ENDPOINT: !GetAtt ProwlerESDomain.DomainEndpoint
-
-  ProcessSecHubFindingsFunctionErrorAlarm:
-    Type: AWS::CloudWatch::Alarm
-    Properties:
-      AlarmName: !Sub ${ProcessSecHubFindingsFunction}-LambdaErrors
-      AlarmDescription: "Alarm if lambda errors out"
-      Namespace: "AWS/Lambda"
-      MetricName: "Errors"
-      Dimensions:
-      - Name: "FunctionName"
-        Value: !Ref ProcessSecHubFindingsFunction
-      Statistic: "Sum"
-      ComparisonOperator: "GreaterThanThreshold"
-      Threshold: 0
-      EvaluationPeriods: 1
-      Period: 60
-      TreatMissingData: "ignore"
-      # AlarmActions:
-      #   - !Ref SlackSNSTopic
-
 
 Outputs:
   TemplateURL:

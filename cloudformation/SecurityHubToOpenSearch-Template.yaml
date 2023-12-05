@@ -1,0 +1,142 @@
+# Copyright 2021-2023 Chris Farris <chrisf@primeharbor.com>
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Ingest Security Hub Findings into an OpenSearch Cluster
+Transform: AWS::Serverless-2016-10-31
+
+Parameters:
+
+  pBucketName:
+    Description: Name of pre-existing Bucket to store findings and backups
+    Type: String
+
+  pAuditRoleName:
+    Description: Default name of the AssumeRole to assume into accounts
+    Type: String
+    Default: security-audit
+
+  pTemplateURL:
+    Description: URL to the Transformed Template this stack was deployed with (for promotion to another environment)
+    Type: String
+
+  #
+  # OpenSearch Related Params
+  #
+  pDomainEndpoint:
+    Description: Endpoint for the OpenSearch Cluster
+    Type: String
+
+  pDomainArn:
+    Description: Arn of the OpenSearch Cluster
+    Type: String
+
+
+Globals:
+  Function:
+    Runtime: python3.9
+    MemorySize: 2048
+    Timeout: 300
+    Environment:
+      Variables:
+          ES_DOMAIN_ENDPOINT: !Ref pDomainEndpoint
+          LOG_LEVEL: 'INFO'
+
+Resources:
+
+
+  #
+  # Lambda Functions
+  #
+  LambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service:
+            - lambda.amazonaws.com
+          Action:
+          - sts:AssumeRole
+      Path: /
+      Policies:
+      - PolicyName: LambdaLogging
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Resource: '*'
+            Action:
+            - logs:*
+            Effect: Allow
+      - PolicyName: IndexData
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Resource: !Sub "${pDomainArn}/*"
+            Action:
+            - es:*
+            Effect: Allow
+
+  ProcessSecHubFindingsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub "${AWS::StackName}-index-findings"
+      Description: Process Security Hub Findings pushed to EventBus
+      Handler: process_sechub.handler
+      Role: !GetAtt LambdaRole.Arn
+      CodeUri: ../lambda
+      ReservedConcurrentExecutions: 10
+      Events:
+        InspectorEventBridge:
+            Type: EventBridgeRule
+            Properties:
+              # DeadLetterConfig: DeadLetterConfig
+              # EventBusName: String
+              # Input: String
+              # InputPath: String
+              # Name: String
+              Pattern:
+                source:
+                  - aws.securityhub
+              # RetryPolicy: RetryPolicy
+              State: ENABLED
+              # Target: Target
+
+  ProcessSecHubFindingsFunctionErrorAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub ${ProcessSecHubFindingsFunction}-LambdaErrors
+      AlarmDescription: "Alarm if lambda errors out"
+      Namespace: "AWS/Lambda"
+      MetricName: "Errors"
+      Dimensions:
+      - Name: "FunctionName"
+        Value: !Ref ProcessSecHubFindingsFunction
+      Statistic: "Sum"
+      ComparisonOperator: "GreaterThanThreshold"
+      Threshold: 0
+      EvaluationPeriods: 1
+      Period: 60
+      TreatMissingData: "ignore"
+
+
+Outputs:
+  TemplateURL:
+    Description: URL to the Transformed Template this stack was deployed with (for promotion to another environment)
+    Value: !Ref pTemplateURL
+
+
+# EOF
