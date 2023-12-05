@@ -14,7 +14,7 @@
 # limitations under the License.
 
 from dateutil import tz
-# from elasticsearch import Elasticsearch, RequestsHttpConnection, ElasticsearchException, RequestError, NotFoundError
+from opensearchpy import OpenSearch, RequestError, NotFoundError, OpenSearchException, RequestsHttpConnection, AWSV4SignerAuth
 from requests_aws4auth import AWS4Auth
 import boto3
 import datetime
@@ -23,9 +23,6 @@ import os
 import re
 import requests
 import time
-from opensearchpy import OpenSearch, RequestError, NotFoundError, OpenSearchException, RequestsHttpConnection, AWSV4SignerAuth
-
-
 
 import logging
 logger = logging.getLogger()
