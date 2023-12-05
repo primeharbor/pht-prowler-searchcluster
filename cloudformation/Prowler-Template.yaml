@@ -16,7 +16,6 @@ AWSTemplateFormatVersion: '2010-09-09'
 Description: Run Prowler across the entire org, and index findings in Elastic Search
 Transform: AWS::Serverless-2016-10-31
 
-
 Parameters:
 
   pBucketName:
@@ -116,9 +115,11 @@ Parameters:
   pDomainEndpoint:
     Description: Hostname of the Domain Endpoint
     Type: String
+    Default: "NONE"
 
 Conditions:
   cSlackSecret: !Not [!Equals [ !Ref pSlackSecret, "NONE" ]]
+  cDeployIngestLambda: !Not [!Equals [ !Ref pDomainEndpoint, "NONE" ]]
 
 Globals:
   Function:
@@ -250,7 +251,6 @@ Resources:
               Value: !Ref pBucketName
             - Name: SECURITY_HUB
               Value: !Ref pSecurityHub
-
 
   ContainerRole:
     Type: AWS::IAM::Role
@@ -402,6 +402,7 @@ Resources:
   #
   LambdaRole:
     Type: AWS::IAM::Role
+    Condition: cDeployIngestLambda
     Properties:
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
@@ -468,6 +469,7 @@ Resources:
 
   ImportProwlerFindingsFunction:
     Type: AWS::Serverless::Function
+    Condition: cDeployIngestLambda
     Properties:
       FunctionName: !Sub "${AWS::StackName}-import-findings"
       Description: Import Prowler Findings into ElasticSearch
@@ -490,6 +492,7 @@ Resources:
 
   ProcessFindingsFileFunction:
     Type: AWS::Serverless::Function
+    Condition: cDeployIngestLambda
     Properties:
       FunctionName: !Sub "${AWS::StackName}-process-finding-file"
       Description: Process the Prowler file pushed to S3
@@ -513,6 +516,7 @@ Resources:
   #
   S3EventQueue:
     Type: AWS::SQS::Queue
+    Condition: cDeployIngestLambda
     Properties:
       # Any messages older than an hour are probably out-of-date
       MessageRetentionPeriod: 36000
@@ -521,6 +525,7 @@ Resources:
 
   S3EventQueuePolicy:
     Type: AWS::SQS::QueuePolicy
+    Condition: cDeployIngestLambda
     Properties:
       Queues:
         - !Ref S3EventQueue
@@ -550,6 +555,7 @@ Resources:
 
   S3EventQueueSubscription:
     Type: AWS::SNS::Subscription
+    Condition: cDeployIngestLambda
     Properties:
       Endpoint: !GetAtt S3EventQueue.Arn
       Protocol: sqs
@@ -557,6 +563,7 @@ Resources:
 
   S3EventQueueAlarm:
     Type: AWS::CloudWatch::Alarm
+    Condition: cDeployIngestLambda
     Properties:
       ActionsEnabled: True
       # AlarmActions:
@@ -583,6 +590,7 @@ Resources:
   #
   FindingIngestEventQueue:
     Type: AWS::SQS::Queue
+    Condition: cDeployIngestLambda
     Properties:
       # Any messages older than an hour are probably out-of-date
       MessageRetentionPeriod: 36000
@@ -591,6 +599,7 @@ Resources:
 
   FindingIngestEventQueueAlarm:
     Type: AWS::CloudWatch::Alarm
+    Condition: cDeployIngestLambda
     Properties:
       ActionsEnabled: True
       # AlarmActions:
@@ -616,6 +625,7 @@ Resources:
   #
   ImportProwlerFindingsFunctionErrorAlarm:
     Type: AWS::CloudWatch::Alarm
+    Condition: cDeployIngestLambda
     Properties:
       AlarmName: !Sub ${ImportProwlerFindingsFunction}-LambdaErrors
       AlarmDescription: "Alarm if lambda errors out"
@@ -635,6 +645,7 @@ Resources:
 
   ProcessFindingsFileFunctionErrorAlarm:
     Type: AWS::CloudWatch::Alarm
+    Condition: cDeployIngestLambda
     Properties:
       AlarmName: !Sub ${ProcessFindingsFileFunction}-LambdaErrors
       AlarmDescription: "Alarm if lambda errors out"
