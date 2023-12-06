@@ -90,20 +90,6 @@ ifndef PROWLER_MANIFEST
 endif
 	cft-deploy -m cloudformation/$(PROWLER_MANIFEST) --template-url $(PROWLER_TEMPLATE_URL) pTemplateURL=$(PROWLER_TEMPLATE_URL) pImageVersion=$(IMAGE_VERSION) --force
 
-#
-# OpenSearch Deploy commands
-#
-search-package: deps
-	@aws cloudformation package --template-file $(SEARCH_TEMPLATE) --s3-bucket $(DEPLOY_BUCKET) --s3-prefix $(DEPLOY_PREFIX)/transform --output-template-file cloudformation/$(SEARCH_OUTPUT_TEMPLATE)  --metadata build_ver=$(version)
-	@aws s3 cp cloudformation/$(SEARCH_OUTPUT_TEMPLATE) s3://$(DEPLOY_BUCKET)/$(DEPLOY_PREFIX)/
-	rm cloudformation/$(SEARCH_OUTPUT_TEMPLATE)
-
-search-deploy: search-package
-ifndef SEARCH_MANIFEST
-	$(error SEARCH_MANIFEST is not set)
-endif
-	cft-deploy -m cloudformation/$(SEARCH_MANIFEST) --template-url $(SEARCH_TEMPLATE_URL) pTemplateURL=$(SEARCH_TEMPLATE_URL) --force
-
 
 #
 # Regional Findings Deploy commands
@@ -126,5 +112,8 @@ endif
 push-config:
 	@aws s3 cp $(CONFIG_FILE) s3://$(OUTPUT_BUCKET)/config.yaml
 	@aws s3 cp $(CHECKS_FILE) s3://$(OUTPUT_BUCKET)/checks.json
+
+clean:
+	cd lambda && $(MAKE) clean
 
 # EOF
