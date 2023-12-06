@@ -727,3 +727,6 @@ Outputs:
   ProwlerContainerTaskId:
     Value: !Ref ProwlerTaskDefinition
 
+  ProwlerRoleArn:
+    Value: !GetAtt LambdaRole.Arn
+    Condition: cDeployIngestLambda
