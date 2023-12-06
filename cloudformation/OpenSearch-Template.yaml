@@ -92,7 +92,6 @@ Resources:
         RequireEachIncludedType: True
         SecretStringTemplate: '{"MasterUserName": "admin"}'
 
-
   ProwlerESDomain:
     Type: AWS::OpenSearchService::Domain
     Properties:
@@ -108,7 +107,7 @@ Resources:
           - Effect: "Allow"
             Principal:
               AWS: "*"
-            Action: "es:*"
+            Action: "es:ESHttp*"
             Resource: !Sub "arn:aws:es:${AWS::Region}:${AWS::AccountId}:domain/${pDomainName}/*"
       DomainName: !Ref pDomainName
       EBSOptions:
@@ -151,7 +150,6 @@ Resources:
       DomainEndpointOptions:
         EnforceHTTPS: True
         TLSSecurityPolicy: Policy-Min-TLS-1-2-2019-07
-
 
   SearchClusterKMSKey:
     Type: AWS::KMS::Key
