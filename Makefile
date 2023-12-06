@@ -17,11 +17,6 @@ PROWLER_OUTPUT_TEMPLATE_PREFIX=Prowler-Template-Transformed
 PROWLER_OUTPUT_TEMPLATE=$(PROWLER_OUTPUT_TEMPLATE_PREFIX)-$(version).yaml
 PROWLER_TEMPLATE_URL ?= https://s3.amazonaws.com/$(DEPLOY_BUCKET)/$(DEPLOY_PREFIX)/$(PROWLER_OUTPUT_TEMPLATE)
 
-SEARCH_TEMPLATE=cloudformation/OpenSearch-Template.yaml
-SEARCH_OUTPUT_TEMPLATE_PREFIX=OpenSearch-Template-Transformed
-SEARCH_OUTPUT_TEMPLATE=$(SEARCH_OUTPUT_TEMPLATE_PREFIX)-$(version).yaml
-SEARCH_TEMPLATE_URL ?= https://s3.amazonaws.com/$(DEPLOY_BUCKET)/$(DEPLOY_PREFIX)/$(SEARCH_OUTPUT_TEMPLATE)
-
 FINDINGS_TEMPLATE=cloudformation/RegionalFindings-Template.yaml
 FINDINGS_OUTPUT_TEMPLATE_PREFIX=RegionalFindings-Template-Transformed
 FINDINGS_OUTPUT_TEMPLATE=$(FINDINGS_OUTPUT_TEMPLATE_PREFIX)-$(version).yaml
@@ -112,6 +107,11 @@ endif
 push-config:
 	@aws s3 cp $(CONFIG_FILE) s3://$(OUTPUT_BUCKET)/config.yaml
 	@aws s3 cp $(CHECKS_FILE) s3://$(OUTPUT_BUCKET)/checks.json
+
+fetch-config:
+	@aws s3 cp s3://$(OUTPUT_BUCKET)/config.yaml $(CONFIG_FILE)
+	@aws s3 cp s3://$(OUTPUT_BUCKET)/checks.json $(CHECKS_FILE)
+
 
 clean:
 	cd lambda && $(MAKE) clean

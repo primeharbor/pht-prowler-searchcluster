@@ -111,6 +111,7 @@ Parameters:
   pDomainArn:
     Description: OpenSearch Domain ARN (for lambda perms)
     Type: String
+    Default: arn:aws:sts::123456789012:NONE
 
   pDomainEndpoint:
     Description: Hostname of the Domain Endpoint

@@ -33,7 +33,7 @@ Parameters:
     Type: String
     Description: Size of the ES Cluster
     Default: t2.small.search
-    ConstraintDescription: Must be a valid Elasticsearch Service InstanceType (https://aws.amazon.com/elasticsearch-service/pricing/)
+    ConstraintDescription: Must be a valid Elasticsearch Service InstanceType (https://aws.amazon.com/elasticsearch-service/pricing/). Do not use t2 class with pClusterEncryption=True
 
   pClusterInstanceCount:
     Type: Number
@@ -307,6 +307,8 @@ Outputs:
   ESDomainEndpoint:
     Value: !GetAtt ProwlerESDomain.DomainEndpoint
 
+  AdminLoginCredentials:
+    Value: !Ref OpenSearchAdminCredentials
 
 
 
