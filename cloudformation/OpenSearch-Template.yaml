@@ -61,20 +61,13 @@ Parameters:
   pEngineVersion:
     Type: String
     Description: What version of OpenSearch you want to use
-    Default: "OpenSearch_2.7"
-
-  pOpenSearchAdminPassword:
-    Description: Initial Password for the OpenSearch Dashboard
-    Type: String
-    NoEcho: true
+    Default: "OpenSearch_2.11"
 
 
 Conditions:
   EncryptionEnabled: !Equals [ !Ref pClusterEncryption, True ]
 
 Resources:
-
-
 
   #
   # OpenSearchService Cluster
