@@ -18,7 +18,7 @@ PIP=pip3
 
 FILES =	import_findings.py process_finding_file.py
 
-DEPENDENCIES=elasticsearch requests_aws4auth bin certifi idna charset_normalizer six.py urllib3 elastic_transport requests
+DEPENDENCIES=elasticsearch requests_aws4auth bin certifi idna charset_normalizer six.py urllib3 elastic_transport requests dateutil opensearchpy
 
 clean:
 	rm -rf __pycache__ *.zip *.dist-info *.egg-info $(DEPENDENCIES)
