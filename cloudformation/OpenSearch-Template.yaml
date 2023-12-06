@@ -14,16 +14,11 @@
 
 AWSTemplateFormatVersion: '2010-09-09'
 Description: Create an OpenSearch Cluster for Prowler and Security Hub
-Transform: AWS::Serverless-2016-10-31
 
 Parameters:
 
   pBucketName:
     Description: Name of pre-existing Bucket to store findings and backups
-    Type: String
-
-  pTemplateURL:
-    Description: URL to the Transformed Template this stack was deployed with (for promotion to another environment)
     Type: String
 
   #
@@ -37,7 +32,7 @@ Parameters:
   pClusterInstanceType:
     Type: String
     Description: Size of the ES Cluster
-    Default: t2.small.elasticsearch
+    Default: t2.small.search
     ConstraintDescription: Must be a valid Elasticsearch Service InstanceType (https://aws.amazon.com/elasticsearch-service/pricing/)
 
   pClusterInstanceCount:
@@ -79,9 +74,25 @@ Conditions:
 
 Resources:
 
+
+
   #
   # OpenSearchService Cluster
   #
+  OpenSearchAdminCredentials:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Description: !Sub Credentials for OpenSearch cluster from ${AWS::StackName}
+      KmsKeyId: !Ref SearchClusterKMSKey
+      # Name: String
+      GenerateSecretString:
+        GenerateStringKey: "MasterUserPassword"
+        IncludeSpace: False
+        PasswordLength: 32
+        RequireEachIncludedType: True
+        SecretStringTemplate: '{"MasterUserName": "admin"}'
+
+
   ProwlerESDomain:
     Type: AWS::OpenSearchService::Domain
     Properties:
@@ -89,8 +100,8 @@ Resources:
         Enabled: true
         InternalUserDatabaseEnabled: true
         MasterUserOptions:
-          MasterUserName: admin
-          MasterUserPassword: !Ref pOpenSearchAdminPassword
+          MasterUserName: !Sub '{{resolve:secretsmanager:${OpenSearchAdminCredentials}:SecretString:MasterUserName}}'
+          MasterUserPassword: !Sub '{{resolve:secretsmanager:${OpenSearchAdminCredentials}:SecretString:MasterUserPassword}}'
       AccessPolicies:
         Version: 2012-10-17
         Statement:
@@ -141,6 +152,7 @@ Resources:
         EnforceHTTPS: True
         TLSSecurityPolicy: Policy-Min-TLS-1-2-2019-07
 
+
   SearchClusterKMSKey:
     Type: AWS::KMS::Key
     # Condition: EncryptionEnabled
@@ -166,6 +178,7 @@ Resources:
                 - "s3.amazonaws.com"
                 - "sqs.amazonaws.com"
                 - "lambda.amazonaws.com"
+                - "cloudformation.amazonaws.com"
                 - !Sub "logs.${AWS::Region}.amazonaws.com"
                 # Added per https://aws.amazon.com/premiumsupport/knowledge-center/sns-topic-sqs-queue-sse-cmk-policy/ to support the S3 Event->SNS->SQS workflow
                 - "sns.amazonaws.com"
@@ -284,14 +297,11 @@ Resources:
             Resource: '*'
 
 Outputs:
-  TemplateURL:
-    Description: URL to the Transformed Template this stack was deployed with (for promotion to another environment)
-    Value: !Ref pTemplateURL
 
   DomainName:
     Value: !Ref pDomainName
 
-  DomainEndpoint:
+  DomainEndpointURL:
     Value: !Sub "https://${ProwlerESDomain.DomainEndpoint}"
 
   SnapshotRoleArn:
