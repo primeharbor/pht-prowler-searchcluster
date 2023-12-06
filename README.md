@@ -20,10 +20,11 @@ export OUTPUT_BUCKET=fooli-prowler
 ```
 
 2. Create Manifest. `cft-generate-manifest -m Fooli-Prowler-Manifest.yaml -t cloudformation/Prowler-Template.yaml`
-  1. If you're not using opensearch, you can just set the `pDomainEndpoint` to the value of NONE
 3. Edit Manifest.
+  1. If you're not using opensearch, you can just set the `pDomainEndpoint` to the value of NONE
 3. Make the ECR Repo: `make env=FOO repo`
 4. Push the container:  `make env=FOO push` (you need docker running)
+  1. Update the Config file to set the correct `IMAGE_VERSION`
 5. Deploy: `make env=FOO prowler-deploy`
 
 
