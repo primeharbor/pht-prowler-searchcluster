@@ -14,5 +14,6 @@
 
 requests
 requests_aws4auth
+urllib3<2
 elasticsearch
 opensearch-py
