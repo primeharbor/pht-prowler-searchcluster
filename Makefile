@@ -8,6 +8,10 @@ endif
 include config.$(env)
 export
 
+ifndef version
+	export version := $(shell date +%Y%m%d-%H%M)
+endif
+
 IMAGENAME ?= prowler
 DEPLOY_PREFIX ?= deploy-packages
 
@@ -21,11 +25,6 @@ FINDINGS_TEMPLATE=cloudformation/RegionalFindings-Template.yaml
 FINDINGS_OUTPUT_TEMPLATE_PREFIX=RegionalFindings-Template-Transformed
 FINDINGS_OUTPUT_TEMPLATE=$(FINDINGS_OUTPUT_TEMPLATE_PREFIX)-$(version).yaml
 FINDINGS_TEMPLATE_URL ?= https://s3.amazonaws.com/$(DEPLOY_BUCKET)/$(DEPLOY_PREFIX)/$(FINDINGS_OUTPUT_TEMPLATE)
-
-ifndef version
-	export version := $(shell date +%Y%m%d-%H%M)
-endif
-
 
 #
 # Prowler Container Targets
@@ -78,6 +77,7 @@ prowler-package: deps
 	@aws cloudformation package --template-file $(PROWLER_TEMPLATE) --s3-bucket $(DEPLOY_BUCKET) --s3-prefix $(DEPLOY_PREFIX)/transform --output-template-file cloudformation/$(PROWLER_OUTPUT_TEMPLATE)  --metadata build_ver=$(version)
 	@aws s3 cp cloudformation/$(PROWLER_OUTPUT_TEMPLATE) s3://$(DEPLOY_BUCKET)/$(DEPLOY_PREFIX)/
 	rm cloudformation/$(PROWLER_OUTPUT_TEMPLATE)
+	@echo "Deploy via $(PROWLER_TEMPLATE_URL)"
 
 prowler-deploy: prowler-package
 ifndef PROWLER_MANIFEST
