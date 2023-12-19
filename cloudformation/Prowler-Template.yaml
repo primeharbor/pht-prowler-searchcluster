@@ -140,7 +140,7 @@ Resources:
   #
   ProwlerBucket:
     Type: AWS::S3::Bucket
-    DeletionPolicy: Retain
+    DeletionPolicy: RetainExceptOnCreate
     DependsOn: ProwlerBucketNotificationTopicPolicy
     Properties:
       # AccessControl: Private
