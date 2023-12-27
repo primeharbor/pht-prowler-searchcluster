@@ -44,7 +44,7 @@ if [[ -z "$SLACK_CHANNEL_ID" ]] ; then
 fi
 
 if [[ ! -z "$SECURITY_HUB" ]] ; then
-	if [[ $SECURITY_HUB -eq 1 ]] ; then
+	if [[ $SECURITY_HUB == "ENABLED" ]] ; then
 		SECURITY_HUB_FLAG=" -S "
 	fi
 fi
@@ -68,6 +68,13 @@ while read line ; do
 	fi
 
 	echo "Starting Scan of account $ACCOUNT_ID at epoch timestamp $START."
+	echo "Command: prowler aws -M csv json json-asff html -b -z $SLACK $SECURITY_HUB_FLAG \
+		--checks-file checks.json -f $REGIONS \
+		--log-file prowler-logs-${ACCOUNT_ID}-${TODAY}.log \
+		-F prowler-${ACCOUNT_ID}-${TODAY} --log-level ERROR \
+		-R arn:aws:iam::$ACCOUNT_ID:role/$ROLENAME \
+		-O arn:aws:iam::$PAYER_ID:role/$ROLENAME \
+		-D ${OUTPUT_BUCKET} -o prowler-output 2> prowler-errors-${ACCOUNT_ID}-${TODAY}.log"
 	prowler aws -M csv json json-asff html -b -z $SLACK $SECURITY_HUB_FLAG \
 		--checks-file checks.json -f $REGIONS \
 		--log-file prowler-logs-${ACCOUNT_ID}-${TODAY}.log \
