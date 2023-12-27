@@ -23,8 +23,9 @@ RUN mkdir -p /home/prowler && \
     chown -R prowler:prowler /home/prowler
 
 COPY scripts/scan_organization.sh /home/prowler/scan_organization.sh
-RUN chown prowler /home/prowler/scan_organization.sh
-RUN chmod 755 /home/prowler/scan_organization.sh
+COPY scripts/enable_prowler_securityhub_integration.py /home/prowler/enable_prowler_securityhub_integration.py
+RUN chown prowler /home/prowler/scan_organization.sh /home/prowler/enable_prowler_securityhub_integration.py
+RUN chmod 755 /home/prowler/scan_organization.sh /home/prowler/enable_prowler_securityhub_integration.py
 
 # Install prowler as prowler
 USER prowler

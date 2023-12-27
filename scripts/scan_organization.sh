@@ -46,6 +46,7 @@ fi
 if [[ ! -z "$SECURITY_HUB" ]] ; then
 	if [[ $SECURITY_HUB == "ENABLED" ]] ; then
 		SECURITY_HUB_FLAG=" -S "
+		./enable_prowler_securityhub_integration.py --product-name prowler --company-name prowler --role-name $ROLENAME
 	fi
 fi
 
