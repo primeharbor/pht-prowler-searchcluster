@@ -71,24 +71,29 @@ while read line ; do
 	echo "Starting Scan of account $ACCOUNT_ID at epoch timestamp $START."
 	echo "Command: prowler aws -M csv json json-asff html -b -z $SLACK $SECURITY_HUB_FLAG \
 		--checks-file checks.json -f $REGIONS \
-		--log-file prowler-logs-${ACCOUNT_ID}-${TODAY}.log \
-		-F prowler-${ACCOUNT_ID}-${TODAY} --log-level ERROR \
+		--config-file config.yaml \
+		--log-file prowler-logs-${ACCOUNT_ID}-${TODAY}.json \
+		-F prowler-${ACCOUNT_ID}-${TODAY} --log-level WARNING \
 		-R arn:aws:iam::$ACCOUNT_ID:role/$ROLENAME \
 		-O arn:aws:iam::$PAYER_ID:role/$ROLENAME \
 		-D ${OUTPUT_BUCKET} -o prowler-output 2> prowler-errors-${ACCOUNT_ID}-${TODAY}.log"
 	prowler aws -M csv json json-asff html -b -z $SLACK $SECURITY_HUB_FLAG \
 		--checks-file checks.json -f $REGIONS \
-		--log-file prowler-logs-${ACCOUNT_ID}-${TODAY}.log \
-		-F prowler-${ACCOUNT_ID}-${TODAY} --log-level ERROR \
+		--config-file config.yaml \
+		--log-file prowler-logs-${ACCOUNT_ID}-${TODAY}.json \
+		-F prowler-${ACCOUNT_ID}-${TODAY} --log-level WARNING \
 		-R arn:aws:iam::$ACCOUNT_ID:role/$ROLENAME \
 		-O arn:aws:iam::$PAYER_ID:role/$ROLENAME \
-		-D ${OUTPUT_BUCKET} -o prowler-output 2> prowler-errors-${ACCOUNT_ID}-${TODAY}.log
+		-D ${OUTPUT_BUCKET} -o prowler-output 2> prowler-errors-${ACCOUNT_ID}-${TODAY}.log > prowler-logs-${ACCOUNT_ID}-${TODAY}.log
 	RC=$?
 
 	END=`date +%s`
 	DUR=`expr $END - $START`
 
+	cat prowler-logs-${ACCOUNT_ID}-${TODAY}.json  # Send this to CWL
+
 	aws s3 cp prowler-logs-${ACCOUNT_ID}-${TODAY}.log s3://${OUTPUT_BUCKET}/prowler-logs/
+	aws s3 cp prowler-logs-${ACCOUNT_ID}-${TODAY}.json s3://${OUTPUT_BUCKET}/prowler-logs/
 	aws s3 cp prowler-errors-${ACCOUNT_ID}-${TODAY}.log s3://${OUTPUT_BUCKET}/prowler-logs/
 	echo "Prowler Exited for $ACCOUNT_ID with error code $RC after $DUR seconds"
 

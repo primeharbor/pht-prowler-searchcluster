@@ -33,7 +33,7 @@ def main(args, logger):
     accounts = get_all_accounts()
     for a in accounts:
         account_id = a['Id']
-        logger.info(f"Processing {a['Name']}({a['Id']})")
+        logger.info(f"Enabling {args.product_name} from {args.company_name} in account {a['Name']}({a['Id']})")
 
         creds = get_creds(args.role_name, account_id)
         regions = get_regions(creds)
