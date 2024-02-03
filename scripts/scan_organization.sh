@@ -92,6 +92,10 @@ while read line ; do
 
 	cat prowler-logs-${ACCOUNT_ID}-${TODAY}.json  # Send this to CWL
 
+    # We want to see this in the CWLogs
+	grep "AWS Security Hub!" prowler-logs-${ACCOUNT_ID}-${TODAY}.log
+
+    # Archive everything because storage is cheap or something
 	aws s3 cp prowler-logs-${ACCOUNT_ID}-${TODAY}.log s3://${OUTPUT_BUCKET}/prowler-logs/
 	aws s3 cp prowler-logs-${ACCOUNT_ID}-${TODAY}.json s3://${OUTPUT_BUCKET}/prowler-logs/
 	aws s3 cp prowler-errors-${ACCOUNT_ID}-${TODAY}.log s3://${OUTPUT_BUCKET}/prowler-logs/
