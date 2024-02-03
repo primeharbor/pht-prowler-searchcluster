@@ -31,7 +31,17 @@ fi
 
 OSPASSWD=`aws secretsmanager get-secret-value --secret-id $SECRET_ID  --query SecretString --output text | jq -r .MasterUserPassword`
 ENDPOINT=`aws cloudformation describe-stacks --stack-name ${SEARCH_STACKNAME} --output text --query "Stacks[0].Outputs[?OutputKey=='DomainEndpointURL'].OutputValue" `
-ROLE=`aws cloudformation describe-stacks --stack-name ${PROWLER_STACKNAME} --output text --query "Stacks[0].Outputs[?OutputKey=='ProwlerRoleArn'].OutputValue" `
+LAMBDA_ROLE=`aws cloudformation describe-stacks --stack-name ${PROWLER_STACKNAME} --output text --query "Stacks[0].Outputs[?OutputKey=='ProwlerRoleArn'].OutputValue" `
 
 echo "Using Credentials from $SECRET_ID against $ENDPOINT to add $ROLE"
-curl -XPUT -u admin:$OSPASSWD $ENDPOINT/_plugins/_security/api/rolesmapping/all_access -d '{"backend_roles": ["'$ROLE'"], "hosts": [], "users": ["admin"] }' -H 'Content-Type: application/json'
+
+echo "Getting current mapping"
+
+curl -s -u admin:$OSPASSWD  -H 'Content-Type: application/json' \
+    $ENDPOINT/_plugins/_security/api/rolesmapping/all_access > ${SEARCH_STACKNAME}-mapping.json
+
+cat ${SEARCH_STACKNAME}-mapping.json | jq '.all_access.backend_roles += ["'$LAMBDA_ROLE'"]' | jq '.all_access | del(.hidden) | del(.reserved)' >  ${SEARCH_STACKNAME}-new-mapping.json
+
+curl -XPUT -u admin:$OSPASSWD  -H 'Content-Type: application/json' \
+    $ENDPOINT/_plugins/_security/api/rolesmapping/all_access \
+    -d @${SEARCH_STACKNAME}-new-mapping.json
