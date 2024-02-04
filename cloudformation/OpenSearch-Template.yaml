@@ -63,9 +63,42 @@ Parameters:
     Description: What version of OpenSearch you want to use
     Default: "OpenSearch_2.11"
 
+  # SAML Options
+  pSAMLEntityId:
+    Description: AWS Identity Center ID for the SAML Application
+    Type: String
+    Default: "NONE"
+
+  pSAMLMetadataContent:
+    Description: AWS Identity Center SAML Metadata Document
+    Type: String
+    Default: "NONE"
+
+  pMasterBackendRoleId:
+    Description: AWS Identity Center Group _ID_ granted admin access to OpenSearch
+    Type: String
+    Default: "NONE"
+
+  # CustomDomain Options
+  pCustomEndpoint:
+    Description: FQDN of the Custom Domain Endpoint to use for the Prowler cluster
+    Type: String
+    Default: "NONE"
+
+  pHostedZoneId:
+    Description: Hosted Zone ID for where the ACM Validation will occur
+    Type: String
+    Default: "NONE"
 
 Conditions:
   EncryptionEnabled: !Equals [ !Ref pClusterEncryption, True ]
+  cEnableSAML: !And
+    - !Not [!Equals [ !Ref pSAMLEntityId, "NONE" ]]
+    - !Not [!Equals [ !Ref pSAMLMetadataContent, "NONE" ]]
+    - !Not [!Equals [ !Ref pMasterBackendRoleId, "NONE" ]]
+  cCustomEndpoint: !And
+    - !Not [!Equals [ !Ref pCustomEndpoint, "NONE" ]]
+    - !Not [!Equals [ !Ref pHostedZoneId, "NONE" ]]
 
 Resources:
 
@@ -94,6 +127,17 @@ Resources:
         MasterUserOptions:
           MasterUserName: !Sub '{{resolve:secretsmanager:${OpenSearchAdminCredentials}:SecretString:MasterUserName}}'
           MasterUserPassword: !Sub '{{resolve:secretsmanager:${OpenSearchAdminCredentials}:SecretString:MasterUserPassword}}'
+        SAMLOptions:
+          Fn::If:
+          - cEnableSAML
+          - Enabled: True
+            Idp:
+              EntityId: !Ref pSAMLEntityId
+              MetadataContent: !Ref pSAMLMetadataContent
+            MasterBackendRole: !Ref pMasterBackendRoleId
+            RolesKey: Role
+            SessionTimeoutMinutes: 1440
+          - Enabled: False
       AccessPolicies:
         Version: 2012-10-17
         Statement:
@@ -143,6 +187,40 @@ Resources:
       DomainEndpointOptions:
         EnforceHTTPS: True
         TLSSecurityPolicy: Policy-Min-TLS-1-2-2019-07
+        CustomEndpoint: !If
+          - cCustomEndpoint
+          - !Ref pCustomEndpoint
+          - !Ref AWS::NoValue
+        CustomEndpointCertificateArn: !If
+          - cCustomEndpoint
+          - !Ref ProwlerDomainCert
+          - !Ref AWS::NoValue
+        CustomEndpointEnabled: !If
+          - cCustomEndpoint
+          - True
+          - False
+
+  ProwlerDomainCert:
+    Condition: cCustomEndpoint
+    Type: AWS::CertificateManager::Certificate
+    Properties:
+      CertificateTransparencyLoggingPreference: DISABLED
+      DomainName: !Ref pCustomEndpoint
+      DomainValidationOptions:
+        - DomainName: !Ref pCustomEndpoint
+          HostedZoneId: !Ref pHostedZoneId
+      ValidationMethod: DNS
+
+  PublicRecordSet:
+    Type: AWS::Route53::RecordSet
+    Condition: cCustomEndpoint
+    Properties:
+      HostedZoneId: !Ref pHostedZoneId
+      Name: !Ref pCustomEndpoint
+      ResourceRecords:
+        - !GetAtt ProwlerESDomain.DomainEndpoint
+      TTL: 300
+      Type: CNAME
 
   SearchClusterKMSKey:
     Type: AWS::KMS::Key
@@ -286,6 +364,10 @@ Resources:
             - s3:GetBucketLocation
             Effect: Allow
             Resource: '*'
+
+
+
+
 
 Outputs:
 
