@@ -53,6 +53,8 @@ fi
 # Download the list of checks from S3
 aws s3 cp s3://${OUTPUT_BUCKET}/checks.json .
 aws s3 cp s3://${OUTPUT_BUCKET}/config.yaml .
+aws s3 cp s3://${OUTPUT_BUCKET}/metadata.yaml .
+aws s3 cp s3://${OUTPUT_BUCKET}/allow_list.yaml .
 
 TODAY=`date +%Y-%m-%d`
 
@@ -72,6 +74,8 @@ while read line ; do
 	echo "Command: prowler aws -M csv json json-asff html -b -z $SLACK $SECURITY_HUB_FLAG \
 		--checks-file checks.json -f $REGIONS \
 		--config-file config.yaml \
+		--custom-checks-metadata-file metadata.yaml \
+		--ignore-unused-services -w allow_list.yaml \
 		--log-file prowler-logs-${ACCOUNT_ID}-${TODAY}.json \
 		-F prowler-${ACCOUNT_ID}-${TODAY} --log-level WARNING \
 		-R arn:aws:iam::$ACCOUNT_ID:role/$ROLENAME \
@@ -80,6 +84,8 @@ while read line ; do
 	prowler aws -M csv json json-asff html -b -z $SLACK $SECURITY_HUB_FLAG \
 		--checks-file checks.json -f $REGIONS \
 		--config-file config.yaml \
+		--custom-checks-metadata-file metadata.yaml \
+		--ignore-unused-services -w allow_list.yaml \
 		--log-file prowler-logs-${ACCOUNT_ID}-${TODAY}.json \
 		-F prowler-${ACCOUNT_ID}-${TODAY} --log-level WARNING \
 		-R arn:aws:iam::$ACCOUNT_ID:role/$ROLENAME \
