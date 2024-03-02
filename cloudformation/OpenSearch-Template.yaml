@@ -1,4 +1,4 @@
-# Copyright 2021-2023 Chris Farris <chrisf@primeharbor.com>
+# Copyright 2021-2024 Chris Farris <chrisf@primeharbor.com>
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -33,7 +33,7 @@ Parameters:
     Type: String
     Description: Size of the ES Cluster
     Default: t3.small.search
-    ConstraintDescription: Must be a valid Elasticsearch Service InstanceType (https://aws.amazon.com/elasticsearch-service/pricing/). Do not use t2 class with pClusterEncryption=True
+    ConstraintDescription: Must be a valid Elasticsearch Service InstanceType (https://aws.amazon.com/elasticsearch-service/pricing/). Do not use t2 class.
 
   pClusterInstanceCount:
     Type: Number
@@ -50,13 +50,6 @@ Parameters:
     Description: IOPS for instance disk. Must be greater than 3000
     Default: 3000
 
-  pClusterEncryption:
-    Type: String
-    Description: Enable Encryption for the Elasticsearch Cluster
-    Default: False
-    AllowedValues:
-      - True
-      - False
 
   pEngineVersion:
     Type: String
@@ -91,7 +84,6 @@ Parameters:
     Default: "NONE"
 
 Conditions:
-  EncryptionEnabled: !Equals [ !Ref pClusterEncryption, True ]
   cEnableSAML: !And
     - !Not [!Equals [ !Ref pSAMLEntityId, "NONE" ]]
     - !Not [!Equals [ !Ref pSAMLMetadataContent, "NONE" ]]
@@ -120,6 +112,8 @@ Resources:
 
   ProwlerESDomain:
     Type: AWS::OpenSearchService::Domain
+    DependsOn:
+      - OpenSearchLogPolicy
     Properties:
       AdvancedSecurityOptions:
         Enabled: true
@@ -161,14 +155,10 @@ Resources:
       EngineVersion: !Ref pEngineVersion
       # Encryption at rest is not supported with t2.small.elasticsearch
       EncryptionAtRestOptions:
-        Enabled: !Ref pClusterEncryption
-        KmsKeyId:
-          Fn::If:
-          - EncryptionEnabled
-          - Ref: SearchClusterKMSKey
-          - Ref: AWS::NoValue
+        Enabled: True
+        KmsKeyId: !Ref SearchClusterKMSKey
       NodeToNodeEncryptionOptions:
-        Enabled: !Ref pClusterEncryption
+        Enabled: True
       LogPublishingOptions:
         ES_APPLICATION_LOGS:
           CloudWatchLogsLogGroupArn: !GetAtt ApplicationLogGroup.Arn
@@ -224,7 +214,6 @@ Resources:
 
   SearchClusterKMSKey:
     Type: AWS::KMS::Key
-    # Condition: EncryptionEnabled
     Properties:
       Description: !Sub KMS Key in ${AWS::StackName}
       Enabled: True
@@ -261,7 +250,6 @@ Resources:
 
   SearchClusterKMSKeyAlias:
     Type: AWS::KMS::Alias
-    # Condition: EncryptionEnabled
     Properties:
       AliasName: !Sub "alias/${AWS::StackName}-kmskey"
       TargetKeyId: !Ref SearchClusterKMSKey
@@ -269,40 +257,28 @@ Resources:
   ApplicationLogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
-      KmsKeyId: !If
-        - EncryptionEnabled
-        - !GetAtt SearchClusterKMSKey.Arn
-        - !Ref AWS::NoValue
+      KmsKeyId: !GetAtt SearchClusterKMSKey.Arn
       LogGroupName: !Sub ${AWS::StackName}-application-logs
       RetentionInDays: 180
 
   AuditLogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
-      KmsKeyId: !If
-        - EncryptionEnabled
-        - !GetAtt SearchClusterKMSKey.Arn
-        - !Ref AWS::NoValue
+      KmsKeyId: !GetAtt SearchClusterKMSKey.Arn
       LogGroupName: !Sub ${AWS::StackName}-audit-logs
       RetentionInDays: 180
 
   SearchSlowLogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
-      KmsKeyId: !If
-        - EncryptionEnabled
-        - !GetAtt SearchClusterKMSKey.Arn
-        - !Ref AWS::NoValue
+      KmsKeyId: !GetAtt SearchClusterKMSKey.Arn
       LogGroupName: !Sub ${AWS::StackName}-slow-logs
       RetentionInDays: 180
 
   IndexSlowLogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
-      KmsKeyId: !If
-        - EncryptionEnabled
-        - !GetAtt SearchClusterKMSKey.Arn
-        - !Ref AWS::NoValue
+      KmsKeyId: !GetAtt SearchClusterKMSKey.Arn
       LogGroupName: !Sub ${AWS::StackName}-index-slow-logs
       RetentionInDays: 180
 
