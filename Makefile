@@ -39,7 +39,7 @@ run: stop
 	docker run -it -v ./prowler-output:/home/prowler/prowler-output \
 		-e AWS_DEFAULT_REGION -e AWS_SECRET_ACCESS_KEY -e AWS_ACCESS_KEY_ID -e AWS_SESSION_TOKEN \
 		-e ROLENAME -e PAYER_ID  -e OUTPUT_BUCKET \
-		$(IMAGENAME)
+		--entrypoint bash $(IMAGENAME)
 
 build-run: stop build run
 
@@ -107,6 +107,8 @@ endif
 push-config:
 	@aws s3 cp $(CONFIG_FILE) s3://$(OUTPUT_BUCKET)/config.yaml
 	@aws s3 cp $(CHECKS_FILE) s3://$(OUTPUT_BUCKET)/checks.json
+	@aws s3 cp $(METADATA_FILE) s3://$(OUTPUT_BUCKET)/metadata.yaml
+	@aws s3 cp $(ALLOW_LIST) s3://$(OUTPUT_BUCKET)/allow_list.yaml
 
 fetch-config:
 	@aws s3 cp s3://$(OUTPUT_BUCKET)/config.yaml $(CONFIG_FILE)
