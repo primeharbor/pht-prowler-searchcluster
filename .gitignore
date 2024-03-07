@@ -34,6 +34,7 @@ lambda/urllib3
 lambda/dateutil
 lambda/opensearchpy
 
+Prowler-Template-Transformed-*.yaml
 
 # Created by https://www.gitignore.io/api/osx,python
 
@@ -167,5 +168,6 @@ ENV/
 
 
 # End of https://www.gitignore.io/api/osx,python
+
 
 
