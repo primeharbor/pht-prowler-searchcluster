@@ -58,6 +58,9 @@ aws s3 cp s3://${OUTPUT_BUCKET}/allow_list.yaml .
 
 TODAY=`date +%Y-%m-%d`
 
+# Log this in the CW Logs
+prowler --version
+
 while read line ; do
 
 	START=`date +%s`
