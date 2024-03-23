@@ -14,7 +14,7 @@
 
 FROM python:3.11
 
-LABEL maintainer="https://github.com/primeharbor/prowler-elastistats"
+LABEL maintainer="https://github.com/primeharbor/pht-prowler-searchcluster"
 
 # Create nonroot user
 RUN mkdir -p /home/prowler && \
@@ -33,8 +33,8 @@ WORKDIR /home/prowler
 ENV HOME='/home/prowler'
 ENV PATH="$HOME/.local/bin:$PATH"
 RUN pip install --no-cache-dir --upgrade pip
-RUN pip install awscli
 RUN git clone https://github.com/prowler-cloud/prowler.git
 RUN cd prowler ; pip install --no-cache-dir .
+RUN pip install awscli
 
 CMD /home/prowler/scan_organization.sh
