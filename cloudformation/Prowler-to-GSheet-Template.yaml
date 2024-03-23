@@ -1,0 +1,205 @@
+# Copyright 2024 Chris Farris <chrisf@primeharbor.com>
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Process JSON findings from Prowler into a Google Sheet
+Transform: AWS::Serverless-2016-10-31
+
+Parameters:
+
+  pBucketName:
+    Description: Name of the bucket to hold the prowler results
+    Type: String
+
+  pTemplateURL:
+    Description: URL to the Transformed Template this stack was deployed with (for promotion to another environment)
+    Type: String
+
+  pGoogleSheetSecretArn:
+    Description: ARN of the SecretsManager Secret with the credentials to Google
+    Type: String
+
+  pGoogleSheetName:
+    Description: Name of the Google Sheet to update
+    Type: String
+
+  pOutputNotificationTopicArn:
+    Description: ARN of the SNS Topic with the S3 Event Notifications from Prowler
+    Type: String
+
+
+Globals:
+  Function:
+    Runtime: python3.11
+    MemorySize: 2048
+    Environment:
+      Variables:
+          BUCKET: !Ref pBucketName
+          LOG_LEVEL: 'DEBUG'
+
+Resources:
+
+  LambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service:
+            - lambda.amazonaws.com
+          Action:
+          - sts:AssumeRole
+      Path: /
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AWSOrganizationsReadOnlyAccess
+      Policies:
+      - PolicyName: S3Access
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Action:
+            - s3:*
+            Effect: Allow
+            Resource:
+              - !Sub 'arn:aws:s3:::${pBucketName}/*'
+              - !Sub 'arn:aws:s3:::${pBucketName}'
+          - Action:
+            - s3:ListAllMyBuckets
+            - s3:GetBucketLocation
+            Effect: Allow
+            Resource: '*'
+      - PolicyName: LambdaLogging
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Resource: '*'
+            Action:
+            - logs:*
+            Effect: Allow
+      - PolicyName: GetMessages
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Resource:
+            - !GetAtt GSheetEventQueue.Arn
+            Action:
+            - sqs:*
+            Effect: Allow
+      - PolicyName: GetSecret
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Resource:
+            - !Ref pGoogleSheetSecretArn
+            Action:
+            - secretsmanager:GetSecretValue
+            Effect: Allow
+
+
+  #
+  # GSpread Function
+  #
+  PushToGSheetsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub "${AWS::StackName}-push-to-gsheet"
+      Description: Add Prowler Findings to Google Sheet
+      Handler: push_to_gsheet.handler
+      Role: !GetAtt LambdaRole.Arn
+      CodeUri: ../gsheet-lambda
+      Timeout: 600
+      Events:
+        SQSIngest:
+          Type: SQS
+          Properties:
+            BatchSize: 1
+            Enabled: True
+            Queue: !GetAtt GSheetEventQueue.Arn
+      Environment:
+        Variables:
+          GSHEET_SECRET: !Ref pGoogleSheetSecretArn
+          GSHEET_NAME: !Ref pGoogleSheetName
+
+  GSheetEventQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      # Any messages older than an hour are probably out-of-date
+      MessageRetentionPeriod: 36000
+      ReceiveMessageWaitTimeSeconds: 10
+      VisibilityTimeout: 750
+
+  GSheetEventQueuePolicy:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      Queues:
+        - !Ref GSheetEventQueue
+      PolicyDocument:
+        Version: '2012-10-17'
+        Id: AllowS3
+        Statement:
+        - Sid: AllowS3EventNotification
+          Effect: Allow
+          Principal:
+            AWS: '*'
+          Action:
+          - SQS:SendMessage
+          Resource: !GetAtt GSheetEventQueue.Arn
+          Condition:
+            ArnLike:
+              aws:SourceArn: !Sub "arn:aws:s3:*:*:${pBucketName}"
+        - Sid: Allow-SNS-SendMessage
+          Effect: Allow
+          Principal: "*"
+          Action:
+          - sqs:SendMessage
+          Resource: !GetAtt GSheetEventQueue.Arn
+          Condition:
+            ArnEquals:
+              aws:SourceArn: !Ref pOutputNotificationTopicArn
+
+  GSheetEventQueueSubscription:
+    Type: AWS::SNS::Subscription
+    Properties:
+      Endpoint: !GetAtt GSheetEventQueue.Arn
+      Protocol: sqs
+      TopicArn: !Ref pOutputNotificationTopicArn
+
+  GSheetEventQueueAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      ActionsEnabled: True
+      # AlarmActions:
+      #   - String
+      AlarmDescription: "Alert when Queue doesn't properly drain"
+      AlarmName: !Sub "${AWS::StackName}-Queue"
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      Dimensions:
+        - Name: QueueName
+          Value: !GetAtt GSheetEventQueue.QueueName
+      EvaluationPeriods: 1
+      MetricName: ApproximateNumberOfMessagesVisible
+      Namespace: AWS/SQS
+      # OKActions:
+      #   - String
+      Period: 300
+      Statistic: Average
+      Threshold: 3
+      TreatMissingData: missing
+
+Outputs:
+  TemplateURL:
+    Description: URL to the Transformed Template this stack was deployed with (for promotion to another environment)
+    Value: !Ref pTemplateURL

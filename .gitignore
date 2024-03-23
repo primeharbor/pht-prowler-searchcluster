@@ -34,6 +34,22 @@ lambda/urllib3
 lambda/dateutil
 lambda/opensearchpy
 
+gsheet-lambda/bin
+gsheet-lambda/certifi*
+gsheet-lambda/google*
+gsheet-lambda/docs
+gsheet-lambda/gspread
+gsheet-lambda/requests*
+gsheet-lambda/rsa
+gsheet-lambda/pyasn*
+gsheet-lambda/oauthlib
+gsheet-lambda/scripts
+gsheet-lambda/idna
+gsheet-lambda/urllib3
+gsheet-lambda/strenum
+gsheet-lambda/cachetools
+gsheet-lambda/charset_normalizer
+
 Prowler-Template-Transformed-*.yaml
 
 # Created by https://www.gitignore.io/api/osx,python
