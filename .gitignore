@@ -18,6 +18,8 @@ prowler.err
 
 *-checks.json
 *-config.yaml
+*-allowlist.yaml
+*-metadata.yaml
 
 lambda/bin
 lambda/certifi
