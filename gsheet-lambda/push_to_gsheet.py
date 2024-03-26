@@ -38,6 +38,8 @@ SCOPES = [
     'https://spreadsheets.google.com/feeds'
 ]
 
+BATCH_SIZE=20
+
 # Lambda execution starts here
 def handler(event, context):
     logger.debug("Received event: " + json.dumps(event, sort_keys=True))
@@ -96,6 +98,8 @@ def handler(event, context):
     }
     res = gsheet.batch_update(body)
 
+    count = 0
+
     for record in event['Records']:
         sns_message = json.loads(record['body'])
         if 'Message' in sns_message:
@@ -122,7 +126,7 @@ def handler(event, context):
                 # Remove verbose and deep top-level keys
                 del f['Compliance']
                 del f['Remediation']
-                logger.debug(f"queueing {json.dumps(f, default=str)}")
+                # logger.debug(f"queueing {json.dumps(f, default=str)}")
                 resource_name = ""
                 if 'Name' in f['ResourceTags']:
                     resource_name = f['ResourceTags']['Name']
@@ -143,15 +147,19 @@ def handler(event, context):
                     f['StatusExtended'],
                 ]
                 row_of_rows.append(row)
-                if len(row_of_rows) > 20:
+                if len(row_of_rows) >= BATCH_SIZE:
                     logger.debug(f"Writing {len(row_of_rows)} rows to google")
+                    count += len(row_of_rows)
                     worksheet.append_rows(row_of_rows, value_input_option='RAW', insert_data_option="INSERT_ROWS", include_values_in_response=False)
                     row_of_rows = []
 
             # Write the remaining data for this file
             logger.debug(f"Writing {len(row_of_rows)} rows to google")
+            count += len(row_of_rows)
             worksheet.append_rows(row_of_rows, value_input_option='RAW', insert_data_option="INSERT_ROWS", include_values_in_response=False)
             row_of_rows = []
+
+        logger.info(f"Processed {count} records from {obj_key}")
 
 
 def getSecret(secretName):
