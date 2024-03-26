@@ -730,3 +730,6 @@ Outputs:
   ProwlerRoleArn:
     Value: !GetAtt LambdaRole.Arn
     Condition: cDeployIngestLambda
+
+  ProwlerBucketEventTopicArn:
+    Value: !Ref OutputNotificationTopic
