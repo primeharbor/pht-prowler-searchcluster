@@ -15,11 +15,12 @@
 from botocore.exceptions import ClientError
 from datetime import datetime
 from google.oauth2 import service_account
-from gspread.exceptions import WorksheetNotFound
+from gspread.exceptions import WorksheetNotFound, APIError
 import boto3
 import gspread
 import json
 import os
+from time import sleep
 
 from common import *
 
@@ -38,14 +39,15 @@ SCOPES = [
     'https://spreadsheets.google.com/feeds'
 ]
 
-BATCH_SIZE=20
+BATCH_SIZE=100
+SLEEP_INTERVAL=10
 
 # Lambda execution starts here
 def handler(event, context):
     logger.debug("Received event: " + json.dumps(event, sort_keys=True))
 
     sheet_name = os.environ['GSHEET_NAME']
-    today = datetime.today().strftime('%Y-%m-%d')
+    today = datetime.today().strftime('%Y-%m-%d') # FIXME - Tie this to Assessment Start Time
     worksheet_name = f"Findings-{today}"
 
 
@@ -148,18 +150,29 @@ def handler(event, context):
                 ]
                 row_of_rows.append(row)
                 if len(row_of_rows) >= BATCH_SIZE:
-                    logger.debug(f"Writing {len(row_of_rows)} rows to google")
-                    count += len(row_of_rows)
-                    worksheet.append_rows(row_of_rows, value_input_option='RAW', insert_data_option="INSERT_ROWS", include_values_in_response=False)
+                    count += write_to_gsheet(worksheet, row_of_rows)
                     row_of_rows = []
 
             # Write the remaining data for this file
-            logger.debug(f"Writing {len(row_of_rows)} rows to google")
-            count += len(row_of_rows)
-            worksheet.append_rows(row_of_rows, value_input_option='RAW', insert_data_option="INSERT_ROWS", include_values_in_response=False)
+            count += write_to_gsheet(worksheet, row_of_rows)
             row_of_rows = []
 
         logger.info(f"Processed {count} records from {obj_key}")
+
+def write_to_gsheet(wks, rows):
+    try:
+        logger.debug(f"Writing {len(rows)} rows to google")
+        wks.append_rows(rows, value_input_option='RAW', insert_data_option="INSERT_ROWS", include_values_in_response=False)
+        return(len(rows))
+    except APIError as e:
+        if e.response.status_code == 429:
+            logger.debug(f"Getting Throttled. Sleeping for 1s {e.response.reason}")
+            sleep(SLEEP_INTERVAL)
+            return(write_to_gsheet(wks, rows))
+        else:
+            logger.error(f"Got API Error: {e.response.reason}")
+            raise
+
 
 
 def getSecret(secretName):
