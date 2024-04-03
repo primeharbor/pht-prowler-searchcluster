@@ -46,7 +46,7 @@ Globals:
     Environment:
       Variables:
           BUCKET: !Ref pBucketName
-          LOG_LEVEL: 'DEBUG'
+          LOG_LEVEL: 'INFO'
 
 Resources:
 
