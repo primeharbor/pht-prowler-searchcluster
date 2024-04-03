@@ -59,7 +59,7 @@ def handler(event, context):
         try:
             worksheet = gsheet.worksheet(worksheet_name)
         except WorksheetNotFound as e:
-            worksheet = gsheet.add_worksheet(worksheet_name, 100, len(HEADER_ROW), index=0)
+            worksheet = gsheet.add_worksheet(worksheet_name, 1, len(HEADER_ROW), index=0)
             worksheet.append_row(HEADER_ROW, value_input_option='RAW', insert_data_option="INSERT_ROWS", include_values_in_response=False)
     except Exception as e:
         logger.critical(f"Failed to open Google Sheet: {e}")
@@ -159,6 +159,7 @@ def handler(event, context):
 
         logger.info(f"Processed {count} records from {obj_key}")
 
+
 def write_to_gsheet(wks, rows):
     try:
         logger.debug(f"Writing {len(rows)} rows to google")
@@ -166,13 +167,12 @@ def write_to_gsheet(wks, rows):
         return(len(rows))
     except APIError as e:
         if e.response.status_code == 429:
-            logger.debug(f"Getting Throttled. Sleeping for 1s {e.response.reason}")
+            logger.warning(f"Getting Throttled. Sleeping for {SLEEP_INTERVAL}s {e.response.reason}")
             sleep(SLEEP_INTERVAL)
             return(write_to_gsheet(wks, rows))
         else:
             logger.error(f"Got API Error: {e.response.reason}")
             raise
-
 
 
 def getSecret(secretName):
