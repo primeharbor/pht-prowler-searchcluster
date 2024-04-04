@@ -74,26 +74,27 @@ while read line ; do
 	fi
 
 	echo "Starting Scan of account $ACCOUNT_ID at epoch timestamp $START."
-	echo "Command: prowler aws -M csv json json-asff html -b -z $SLACK $SECURITY_HUB_FLAG \
+	echo "Command: 	prowler aws -M csv json-ocsf json-asff -b -z $SLACK $SECURITY_HUB_FLAG \
 		--checks-file checks.json -f $REGIONS \
-		--config-file config.yaml \
+		--config-file config.yaml -w allow_list.yaml \
 		--custom-checks-metadata-file metadata.yaml \
-		--ignore-unused-services -w allow_list.yaml \
 		--log-file prowler-logs-${ACCOUNT_ID}-${TODAY}.json \
-		-F prowler-${ACCOUNT_ID}-${TODAY} --log-level WARNING \
-		-R arn:aws:iam::$ACCOUNT_ID:role/$ROLENAME \
-		-O arn:aws:iam::$PAYER_ID:role/$ROLENAME \
-		-D ${OUTPUT_BUCKET} -o prowler-output 2> prowler-errors-${ACCOUNT_ID}-${TODAY}.log"
-	prowler aws -M csv json json-asff html -b -z $SLACK $SECURITY_HUB_FLAG \
+		--output-filename prowler-${ACCOUNT_ID}-${TODAY} --log-level WARNING \
+		--role arn:aws:iam::$ACCOUNT_ID:role/$ROLENAME \
+		--organizations-role arn:aws:iam::$PAYER_ID:role/$ROLENAME \
+		--output-bucket-no-assume ${OUTPUT_BUCKET} \
+		--output-directory prowler4-output 2> prowler-errors-${ACCOUNT_ID}-${TODAY}.log > prowler-logs-${ACCOUNT_ID}-${TODAY}.log"
+
+	prowler aws -M csv json-ocsf json-asff -b -z $SLACK $SECURITY_HUB_FLAG \
 		--checks-file checks.json -f $REGIONS \
-		--config-file config.yaml \
+		--config-file config.yaml -w allow_list.yaml \
 		--custom-checks-metadata-file metadata.yaml \
-		--ignore-unused-services -w allow_list.yaml \
 		--log-file prowler-logs-${ACCOUNT_ID}-${TODAY}.json \
-		-F prowler-${ACCOUNT_ID}-${TODAY} --log-level WARNING \
-		-R arn:aws:iam::$ACCOUNT_ID:role/$ROLENAME \
-		-O arn:aws:iam::$PAYER_ID:role/$ROLENAME \
-		-D ${OUTPUT_BUCKET} -o prowler-output 2> prowler-errors-${ACCOUNT_ID}-${TODAY}.log > prowler-logs-${ACCOUNT_ID}-${TODAY}.log
+		--output-filename prowler-${ACCOUNT_ID}-${TODAY} --log-level WARNING \
+		--role arn:aws:iam::$ACCOUNT_ID:role/$ROLENAME \
+		--organizations-role arn:aws:iam::$PAYER_ID:role/$ROLENAME \
+		--output-bucket-no-assume ${OUTPUT_BUCKET} \
+		--output-directory prowler4-output 2> prowler-errors-${ACCOUNT_ID}-${TODAY}.log > prowler-logs-${ACCOUNT_ID}-${TODAY}.log
 	RC=$?
 
 	END=`date +%s`
