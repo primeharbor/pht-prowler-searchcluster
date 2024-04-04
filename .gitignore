@@ -19,6 +19,7 @@ prowler.err
 *-checks.json
 *-config.yaml
 *-allowlist.yaml
+*-allow_list.yaml
 *-metadata.yaml
 
 lambda/bin
