@@ -20,6 +20,7 @@ import boto3
 import gspread
 import json
 import os
+import re
 from time import sleep
 
 from common import *
@@ -39,7 +40,7 @@ SCOPES = [
     'https://spreadsheets.google.com/feeds'
 ]
 
-BATCH_SIZE=100
+BATCH_SIZE=250
 SLEEP_INTERVAL=10
 
 # Lambda execution starts here
@@ -47,60 +48,14 @@ def handler(event, context):
     logger.debug("Received event: " + json.dumps(event, sort_keys=True))
 
     sheet_name = os.environ['GSHEET_NAME']
-    today = datetime.today().strftime('%Y-%m-%d') # FIXME - Tie this to Assessment Start Time
-    worksheet_name = f"Findings-{today}"
-
-
     logger.info(f"Attempting to open {sheet_name} using {GOOGLE_SECRET['client_email']}")
     try:
         credentials = service_account.Credentials.from_service_account_info(GOOGLE_SECRET, scopes=SCOPES)
         gc = gspread.authorize(credentials)
         gsheet = gc.open(sheet_name)
-        try:
-            worksheet = gsheet.worksheet(worksheet_name)
-        except WorksheetNotFound as e:
-            worksheet = gsheet.add_worksheet(worksheet_name, 1, len(HEADER_ROW), index=0)
-            worksheet.append_row(HEADER_ROW, value_input_option='RAW', insert_data_option="INSERT_ROWS", include_values_in_response=False)
     except Exception as e:
         logger.critical(f"Failed to open Google Sheet: {e}")
         return(False)
-
-    sheetId = worksheet._properties['sheetId']
-    body = {
-        "requests": [
-            {
-                "updateDimensionProperties": {
-                    "range": {
-                        "sheetId": sheetId,
-                        "dimension": "COLUMNS",
-                        "startIndex": 0,
-                        "endIndex": 2
-                    },
-                    "properties": {
-                        "hiddenByUser": True,
-                    },
-                    "fields": "hiddenByUser"
-                }
-            },
-            {
-                "setBasicFilter":
-                {
-                    "filter":
-                    {
-                    "range":
-                        {
-                            "sheetId": sheetId,
-                            "startColumnIndex": 0, #column A
-                            "endColumnIndex": len(HEADER_ROW)
-                        }
-                    }
-                }
-            }
-        ]
-    }
-    res = gsheet.batch_update(body)
-
-    count = 0
 
     for record in event['Records']:
         sns_message = json.loads(record['body'])
@@ -113,51 +68,111 @@ def handler(event, context):
         for s3_record in s3_record_list:
             bucket = s3_record['s3']['bucket']['name']
             obj_key = s3_record['s3']['object']['key']
+            process_file(bucket, obj_key, gsheet)
 
-            logger.info(f"Processing file s3://{bucket}/{obj_key}")
-            findings_to_process = get_object(bucket, obj_key)
-            if findings_to_process is None:
-                raise Exception(f"Failed to get s3://{bucket}/{obj_key}") # This will force a requeue?
 
-            row_of_rows = []
+def process_file(bucket, obj_key, gsheet):
+    logger.info(f"Processing file s3://{bucket}/{obj_key}")
+    findings_to_process = get_object(bucket, obj_key)
+    if findings_to_process is None:
+        raise Exception(f"Failed to get s3://{bucket}/{obj_key}") # This will force a requeue?
 
-            logger.info(f"{len(findings_to_process)} findings to process in s3://{bucket}/{obj_key}")
-            for f in findings_to_process:
-                if f['Status'] == "PASS" or f['Status'] == "INFO":
-                    continue
-                # Remove verbose and deep top-level keys
-                del f['Compliance']
-                del f['Remediation']
-                # logger.debug(f"queueing {json.dumps(f, default=str)}")
-                resource_name = ""
-                if 'Name' in f['ResourceTags']:
-                    resource_name = f['ResourceTags']['Name']
-                row = [
-                    f['FindingUniqueId'],
-                    f['AssessmentStartTime'],
-                    f['AccountId'],
-                    f['OrganizationsInfo']['account_details_name'],
-                    f['CheckID'],
-                    f['Severity'],
-                    f['Status'],
-                    f['CheckTitle'],
-                    f['ServiceName'],
-                    f['SubServiceName'],
-                    f['Region'],
-                    f['ResourceArn'],
-                    resource_name,
-                    f['StatusExtended'],
-                ]
-                row_of_rows.append(row)
-                if len(row_of_rows) >= BATCH_SIZE:
-                    count += write_to_gsheet(worksheet, row_of_rows)
-                    row_of_rows = []
+    # figure out which worksheet (by date) from the S3 Object Name (thanks chatgpt)
+    pattern = r'\d{4}-\d{2}-\d{2}' # Regular expression to match the date pattern
+    match = re.search(pattern, obj_key)
 
-            # Write the remaining data for this file
+    if match:
+        # Extract the matched date
+        today = match.group(0)
+    else:
+        logger.critical(f"Date not found in {obj_key}.")
+        return(None)
+
+    worksheet_name = f"Findings-{today}"
+    try:
+        worksheet = gsheet.worksheet(worksheet_name)
+    except WorksheetNotFound as e:
+        worksheet = gsheet.add_worksheet(worksheet_name, 1, len(HEADER_ROW), index=0)
+        worksheet.append_row(HEADER_ROW, value_input_option='RAW', insert_data_option="INSERT_ROWS", include_values_in_response=False)
+
+        # Format the google sheet
+        sheetId = worksheet._properties['sheetId']
+        body = {
+            "requests": [
+                {
+                    "updateDimensionProperties": {
+                        "range": {
+                            "sheetId": sheetId,
+                            "dimension": "COLUMNS",
+                            "startIndex": 0,
+                            "endIndex": 2
+                        },
+                        "properties": {"hiddenByUser": True},
+                        "fields": "hiddenByUser"
+                    }
+                },
+                {
+                    "setBasicFilter":
+                    {
+                        "filter":
+                        {
+                        "range":
+                            {
+                                "sheetId": sheetId,
+                                "startColumnIndex": 0, #column A
+                                "endColumnIndex": len(HEADER_ROW)
+                            }
+                        }
+                    }
+                },
+                {
+                    'updateSheetProperties': {
+                        'properties': {
+                            "sheetId": sheetId,
+                            'gridProperties': {'frozenRowCount': 1}},
+                        'fields': 'gridProperties.frozenRowCount',
+                    }
+                }
+            ]
+        }
+        res = gsheet.batch_update(body)
+
+    row_of_rows = []
+    count = 0
+
+    logger.info(f"{len(findings_to_process)} findings to process in s3://{bucket}/{obj_key}")
+    for f in findings_to_process:
+        if f['Status'] == "PASS" or f['Status'] == "INFO":
+            continue
+        resource_name = ""
+        if 'Name' in f['ResourceTags']:
+            resource_name = f['ResourceTags']['Name']
+        row = [
+            f['FindingUniqueId'],
+            f['AssessmentStartTime'],
+            f['AccountId'],
+            f['OrganizationsInfo']['account_details_name'],
+            f['CheckID'],
+            f['Severity'],
+            f['Status'],
+            f['CheckTitle'],
+            f['ServiceName'],
+            f['SubServiceName'],
+            f['Region'],
+            f['ResourceArn'],
+            resource_name,
+            f['StatusExtended'],
+        ]
+        row_of_rows.append(row)
+        if len(row_of_rows) >= BATCH_SIZE:
             count += write_to_gsheet(worksheet, row_of_rows)
             row_of_rows = []
 
-        logger.info(f"Processed {count} records from {obj_key}")
+    # Write the remaining data for this file
+    count += write_to_gsheet(worksheet, row_of_rows)
+    row_of_rows = []
+
+    logger.info(f"Processed {count} records from {obj_key}")
 
 
 def write_to_gsheet(wks, rows):
