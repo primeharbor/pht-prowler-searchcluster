@@ -58,12 +58,18 @@ def handler(event, context):
         return(False)
 
     for record in event['Records']:
-        sns_message = json.loads(record['body'])
-        if 'Message' in sns_message:
-            sns_message2 = json.loads(sns_message['Message'])
-            s3_record_list = sns_message2['Records']
+        if 'body' in record:
+            sns_message = json.loads(record['body'])
+            if 'Message' in sns_message:
+                sns_message2 = json.loads(sns_message['Message'])
+                if sns_message2['Event'] == "s3:TestEvent":
+                    logger.warning(f"Received Test Event. Doing Nothing.")
+                    continue
+                s3_record_list = sns_message2['Records']
+            else:
+                s3_record_list = message['Records']
         else:
-            s3_record_list = message['Records']
+            s3_record_list = event['Records']
 
         for s3_record in s3_record_list:
             bucket = s3_record['s3']['bucket']['name']
@@ -142,28 +148,13 @@ def process_file(bucket, obj_key, gsheet):
 
     logger.info(f"{len(findings_to_process)} findings to process in s3://{bucket}/{obj_key}")
     for f in findings_to_process:
-        if f['Status'] == "PASS" or f['Status'] == "INFO":
-            continue
-        resource_name = ""
-        if 'Name' in f['ResourceTags']:
-            resource_name = f['ResourceTags']['Name']
-        row = [
-            f['FindingUniqueId'],
-            f['AssessmentStartTime'],
-            f['AccountId'],
-            f['OrganizationsInfo']['account_details_name'],
-            f['CheckID'],
-            f['Severity'],
-            f['Status'],
-            f['CheckTitle'],
-            f['ServiceName'],
-            f['SubServiceName'],
-            f['Region'],
-            f['ResourceArn'],
-            resource_name,
-            f['StatusExtended'],
-        ]
-        row_of_rows.append(row)
+        if 'FindingUniqueId' in f:  # Native Prowler
+            row = process_prowler_native(f)
+        else:
+            row = process_prowler_ocsf(f)
+
+        if row is not None:
+            row_of_rows.append(row)
         if len(row_of_rows) >= BATCH_SIZE:
             count += write_to_gsheet(worksheet, row_of_rows)
             row_of_rows = []
@@ -173,6 +164,61 @@ def process_file(bucket, obj_key, gsheet):
     row_of_rows = []
 
     logger.info(f"Processed {count} records from {obj_key}")
+
+
+def process_prowler_ocsf(f):
+    if f['status_code'] == "PASS" or f['status_code'] == "MANUAL":
+        return(None)
+
+    status = f['status_code']
+    if f['status'] == "Suppressed":
+        status = "Suppressed"
+
+    if len(f['resources']) > 1:
+        logger.warning(f"Finding {f['finding_info']['uid']} has multiple resources")
+
+    row = [
+        f['finding_info']['uid'],
+        f['event_time'],
+        f['cloud']['account']['uid'],
+        f['cloud']['account']['name'],
+        "NotInOCSF", # f['CheckID'],
+        f['severity'],
+        status,
+        f['finding_info']['title'],
+        f['resources'][0]['group']['name'],
+        f['resources'][0]['type'],
+        f['resources'][0]['region'],
+        f['resources'][0]['uid'],
+        f['resources'][0]['name'],
+        f['status_detail'],
+    ]
+    return(row)
+
+
+def process_prowler_native(f):
+    if f['Status'] == "PASS" or f['Status'] == "INFO":
+        return(None)
+    resource_name = ""
+    if 'Name' in f['ResourceTags']:
+        resource_name = f['ResourceTags']['Name']
+    row = [
+        f['FindingUniqueId'],
+        f['AssessmentStartTime'],
+        f['AccountId'],
+        f['OrganizationsInfo']['account_details_name'],
+        f['CheckID'],
+        f['Severity'],
+        f['Status'],
+        f['CheckTitle'],
+        f['ServiceName'],
+        f['SubServiceName'],
+        f['Region'],
+        f['ResourceArn'],
+        resource_name,
+        f['StatusExtended'],
+    ]
+    return(row)
 
 
 def write_to_gsheet(wks, rows):
