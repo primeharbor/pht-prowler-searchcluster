@@ -39,12 +39,18 @@ def handler(event, context):
     org_details = get_org_account_details()
 
     for record in event['Records']:
-        sns_message = json.loads(record['body'])
-        if 'Message' in sns_message:
-            sns_message2 = json.loads(sns_message['Message'])
-            s3_record_list = sns_message2['Records']
+        if 'body' in record:
+            sns_message = json.loads(record['body'])
+            if 'Message' in sns_message:
+                sns_message2 = json.loads(sns_message['Message'])
+                if sns_message2['Event'] == "s3:TestEvent":
+                    logger.warning(f"Received Test Event. Doing Nothing.")
+                    continue
+                s3_record_list = sns_message2['Records']
+            else:
+                s3_record_list = message['Records']
         else:
-            s3_record_list = message['Records']
+            s3_record_list = event['Records']
 
         for s3_record in s3_record_list:
             bucket = s3_record['s3']['bucket']['name']
@@ -57,15 +63,8 @@ def handler(event, context):
 
             logger.info(f"{len(findings_to_process)} findings to process in s3://{bucket}/{obj_key}")
             for f in findings_to_process:
-                # Remove verbose and deep top-level keys
-                del f['Compliance']
-                del f['Remediation']
-                # Decorate the finding with Org Info
-                if f['AccountId'] in org_details:
-                    f['AccountInfo'] = org_details[f['AccountId']]
+                if f['status_code'] == "MANUAL":
+                    continue
                 logger.debug(f"queueing {json.dumps(f, default=str)}")
                 response = sqs_client.send_message(QueueUrl=queue_url, MessageBody=json.dumps(f, default=str))
-
-
-
 

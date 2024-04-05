@@ -160,7 +160,7 @@ Resources:
               S3Key:
                 Rules:
                   - Name: prefix
-                    Value: "prowler-output/json/"
+                    Value: "prowler4-output/json-ocsf/"
                   - Name: suffix
                     Value: ".json"
       OwnershipControls:

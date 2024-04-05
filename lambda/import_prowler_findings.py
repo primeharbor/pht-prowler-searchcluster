@@ -37,7 +37,7 @@ def handler(event, context):
     today = dt.datetime.today().strftime('%Y-%m-%d')
 
     # hard code for now
-    index="prowler_findings"
+    index="prowler_findings_oscf"
 
     region = os.environ['AWS_REGION']
     service = 'es'
@@ -53,10 +53,14 @@ def handler(event, context):
 
     for sqs_record in event['Records']:
         finding_body = json.loads(sqs_record['body'])
-        logger.info(f"Indexing finding for {finding_body['FindingUniqueId']} with a status of {finding_body['Status']}")
+
+        if finding_body['status_code'] == "MANUAL":
+            continue
+
+        logger.debug(f"Indexing finding for {finding_body['finding_info']['uid']} with a status of {finding_body['status_code']}")
 
         # Give each finding a unique document id so we can track overtime.
-        doc_id = f"{finding_body['FindingUniqueId']}-{today}"
+        doc_id = f"{finding_body['finding_info']['uid']}-{today}"
 
         command = {"index": {"_index": index, "_id": doc_id}}
         command_str = json.dumps(command, separators=(',', ':'))
