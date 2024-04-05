@@ -1,0 +1,6 @@
+{ "Records": [ {
+    "s3": {
+        "bucket": { "name": "BUCKET" },
+        "object": { "key": "prowler4-output/json-ocsf/OBJECT" }
+    }
+} ] }
