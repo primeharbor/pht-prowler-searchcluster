@@ -1,0 +1,287 @@
+# Copyright 2021-2023 Chris Farris <chrisf@primeharbor.com>
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Run Prowler across the entire GCP Organization
+
+Parameters:
+
+  pBucketName:
+    Description: Name of the bucket to hold the prowler results
+    Type: String
+
+  pGCPCredsSecretName:
+    Description: "Name of the AWS Secrets Manager Secrets with access to GCP"
+    Type: String
+
+  pScheduleExpression:
+    Description: CloudWatch ScheduleExpression for when the task is run
+    Type: String
+    Default: cron(0 12 * * ? *)
+
+  pRuleState:
+    Type: String
+    Description: Enable or disable the CloudWatch Event to run the ECS Task
+    Default: DISABLED
+    AllowedValues:
+      - DISABLED
+      - ENABLED
+
+  pProwlerMetricNamespace:
+    Type: String
+    Description: Name of the CloudWatch Metrics Namespace to create Log metric filters
+    Default: prowler-gcp
+
+  pLogGroupName:
+    Type: String
+    Description: Name of LogGroup where Prowler Container will write logs
+    Default: prowler-gcp
+
+  pSlackSecret:
+    Description: FullName of secret that has a SLACK_API_TOKEN and SLACK_CHANNEL_ID to push updates to slack. See https://docs.prowler.cloud/en/latest/tutorials/integrations/
+    Type: String
+    Default: "NONE"
+
+  #
+  # Fargate Related Params
+  #
+  pServiceName:
+    Type: String
+    Default: "prowler-gcp"
+    Description: A name for the service
+
+  pContainerCpu:
+    Type: Number
+    Default: 1024
+    Description: How much CPU to give the container. 1024 is 1 CPU
+
+  pContainerMemory:
+    Type: Number
+    Default: 2048
+    Description: How much memory in megabytes to give the container
+
+  pImageRepo:
+    Type: String
+    Description: The url of a docker image that contains the application process that will handle the traffic for this service
+
+  pImageVersion:
+    Description: Version Identifer of Container to Deploy
+    Type: String
+
+  pContainerSubnet:
+    Type: AWS::EC2::Subnet::Id
+    Description: Subnet to use for the Fargate containers
+
+  pECSEventRoleArn:
+    Type: String
+    Description: ECSEventRole Arn from the Prowler Stack
+
+  pECSTaskExecutionRoleArn:
+    Type: String
+    Description: ECSTaskExecutionRole Arn from the Prowler Stack
+
+  pECSClusterArn:
+    Type: String
+    Description: ECSCluster Arn from the Prowler Stack
+
+  pContainerSecurityGroup:
+    Type: String
+    Description: ContainerSecurityGroup ID from the Prowler Stack
+
+
+Conditions:
+  cSlackSecret: !Not [!Equals [ !Ref pSlackSecret, "NONE" ]]
+
+Resources:
+  #
+  # ECS Resources
+  #
+  ProwlerTaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: !Ref 'pServiceName'
+      Cpu: !Ref 'pContainerCpu'
+      Memory: !Ref 'pContainerMemory'
+      NetworkMode: awsvpc
+      RequiresCompatibilities:
+        - FARGATE
+      ExecutionRoleArn: !Ref pECSTaskExecutionRoleArn
+      TaskRoleArn: !Ref ContainerRole
+      RuntimePlatform:
+          CpuArchitecture: ARM64
+          OperatingSystemFamily: LINUX
+      ContainerDefinitions:
+        - Name: !Ref 'pServiceName'
+          Cpu: !Ref 'pContainerCpu'
+          Memory: !Ref 'pContainerMemory'
+          Image: !Sub "${pImageRepo}:${pImageVersion}"
+          LogConfiguration:
+              LogDriver: awslogs
+              Options:
+                awslogs-group: !Ref ContainerLogGroup
+                awslogs-region: !Ref AWS::Region
+                awslogs-create-group: true
+                awslogs-stream-prefix: !Sub "${pServiceName}-${pImageVersion}"
+          Secrets:
+            !If
+            - cSlackSecret
+            -
+              - Name: SLACK_API_TOKEN
+                ValueFrom: !Sub "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:${pSlackSecret}:SLACK_API_TOKEN::"
+              - Name: SLACK_CHANNEL_ID
+                ValueFrom: !Sub "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:${pSlackSecret}:SLACK_CHANNEL_ID::"
+            - !Ref AWS::NoValue
+          Environment:
+            - Name: GCP_CREDS
+              Value: !Ref pGCPCredsSecretName
+            - Name: OUTPUT_BUCKET
+              Value: !Ref pBucketName
+
+  ContainerRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service:
+              - ecs.amazonaws.com
+              - ecs-tasks.amazonaws.com
+          Action: ['sts:AssumeRole']
+      Path: /
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AWSOrganizationsReadOnlyAccess
+      Policies:
+      - PolicyName: ecs-service
+        PolicyDocument:
+          Statement:
+          - Effect: Allow
+            Action:
+              # Rules which allow ECS to attach network interfaces to instances
+              # on your behalf in order for awsvpc networking mode to work right
+              - 'ec2:AttachNetworkInterface'
+              - 'ec2:CreateNetworkInterface'
+              - 'ec2:CreateNetworkInterfacePermission'
+              - 'ec2:DeleteNetworkInterface'
+              - 'ec2:DeleteNetworkInterfacePermission'
+              - 'ec2:Describe*'
+              - 'ec2:DetachNetworkInterface'
+              # Rules which allow ECS to update load balancers on your behalf
+              # with the information sabout how to send traffic to your containers
+              - 'elasticloadbalancing:DeregisterInstancesFromLoadBalancer'
+              - 'elasticloadbalancing:DeregisterTargets'
+              - 'elasticloadbalancing:Describe*'
+              - 'elasticloadbalancing:RegisterInstancesWithLoadBalancer'
+              - 'elasticloadbalancing:RegisterTargets'
+              # Allow the ECS tasks to upload logs to CloudWatch
+              - 'logs:CreateLogStream'
+              - 'logs:CreateLogGroup'
+              - 'logs:PutLogEvents'
+            Resource: '*'
+      - PolicyName: ProwlerPermissions
+        PolicyDocument:
+          Statement:
+          - Sid: WriteResultsToS3
+            Action: s3:*
+            Effect: Allow
+            Resource:
+              - !Sub 'arn:aws:s3:::${pBucketName}/*'
+              - !Sub 'arn:aws:s3:::${pBucketName}'
+          - Sid: AssumeAuditRole
+            Effect: Allow
+            Action:
+              - ssm:GetParameters
+              - secretsmanager:GetSecretValue
+              - kms:Decrypt
+            Resource: !Sub "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:${pGCPCredsSecretName}*"
+
+  RunTaskRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Description: Execute the GCP Prowler container task
+      Name: !Sub ${AWS::StackName}-run-prowler-task
+      # RoleArn: String
+      ScheduleExpression: !Ref pScheduleExpression
+      State: !Ref pRuleState
+      Targets:
+        - Arn: !Ref pECSClusterArn
+          RoleArn: !Ref pECSEventRoleArn
+          Id: Id345
+          EcsParameters:
+            TaskDefinitionArn: !Ref ProwlerTaskDefinition
+            TaskCount: 1
+            LaunchType: FARGATE
+            NetworkConfiguration:
+              AwsVpcConfiguration:
+                Subnets:
+                - !Ref pContainerSubnet
+                SecurityGroups:
+                - !Ref pContainerSecurityGroup
+                AssignPublicIp: ENABLED
+            PlatformVersion: LATEST
+            EnableECSManagedTags: false
+            EnableExecuteCommand: false
+
+  ContainerLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Ref pLogGroupName
+      RetentionInDays: 30
+
+  SuccessfulProwlerRunMetricFilter:
+    Type: AWS::Logs::MetricFilter
+    DependsOn:
+      - ContainerLogGroup
+    Properties:
+      LogGroupName: !Ref ContainerLogGroup
+      FilterPattern: '"Prowler Exited" "with error code 0"'
+      MetricTransformations:
+      - MetricNamespace: !Ref pProwlerMetricNamespace
+        MetricName: successful_prowler_runs
+        MetricValue: '1'
+
+  FailedProwlerRunMetricFilter:
+    Type: AWS::Logs::MetricFilter
+    DependsOn:
+      - ContainerLogGroup
+    Properties:
+      LogGroupName: !Ref ContainerLogGroup
+      FilterPattern: '"Prowler Exited" -"with error code 0"'
+      MetricTransformations:
+      - MetricNamespace: !Ref pProwlerMetricNamespace
+        MetricName: failed_prowler_gcp_runs
+        MetricValue: '1'
+
+  FailedProwlerAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: FailedProwlerGCPRun
+      AlarmDescription: Alarms Prowler exits non-0 for an account.
+      # AlarmActions:
+      MetricName: failed_prowler_gcp_runs
+      Namespace: !Ref pProwlerMetricNamespace
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      EvaluationPeriods: '1'
+      Period: '300'
+      Statistic: Sum
+      Threshold: '1'
+      TreatMissingData: notBreaching
+
+Outputs:
+  ProwlerContainerTaskId:
+    Value: !Ref ProwlerTaskDefinition
+
+  ProwlerBucket:
+    Value: !Ref pBucketName
+

@@ -1,12 +1,20 @@
-# Copyright 2023 - Chris Farris (chris@primeharbor.com) - All Rights Reserved
+# Copyright 2023-2024 Chris Farris <chrisf@primeharbor.com>
 #
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 
 ifndef env
 $(error env is not set)
 endif
-
-# include config.$(env)
-# export
 
 ifndef version
 	export version := $(shell date +%Y%m%d-%H%M)
@@ -40,10 +48,16 @@ build:
 force-build:
 	docker build --no-cache -t $(IMAGENAME) .
 
+build-gcp:
+	docker build -t $(IMAGENAME) -f Dockerfile-GCP .
+
+force-build-gcp:
+	docker build --no-cache -t $(IMAGENAME)  -f Dockerfile-GCP .
+
 run: stop
 	docker run -it -v ./prowler-output:/home/prowler/prowler-output \
 		-e AWS_DEFAULT_REGION -e AWS_SECRET_ACCESS_KEY -e AWS_ACCESS_KEY_ID -e AWS_SESSION_TOKEN \
-		-e ROLENAME -e PAYER_ID  -e OUTPUT_BUCKET \
+		-e ROLENAME -e PAYER_ID -e GCP_CREDS -e OUTPUT_BUCKET \
 		--entrypoint bash $(IMAGENAME)
 
 build-run: stop build run
@@ -68,6 +82,7 @@ endif
 	docker push $(AWS_ACCOUNT_ID).dkr.ecr.$(AWS_DEFAULT_REGION).amazonaws.com/$(IMAGENAME):$(version)
 
 container: build push
+gcp-container: build-gcp push
 
 #
 # General Lambda / CFn targets
