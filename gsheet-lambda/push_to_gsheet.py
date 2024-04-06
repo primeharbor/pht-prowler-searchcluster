@@ -62,7 +62,7 @@ def handler(event, context):
             sns_message = json.loads(record['body'])
             if 'Message' in sns_message:
                 sns_message2 = json.loads(sns_message['Message'])
-                if sns_message2['Event'] == "s3:TestEvent":
+                if 'Event' in sns_message2 and sns_message2['Event'] == "s3:TestEvent":
                     logger.warning(f"Received Test Event. Doing Nothing.")
                     continue
                 s3_record_list = sns_message2['Records']
