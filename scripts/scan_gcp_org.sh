@@ -60,7 +60,7 @@ echo "Command: prowler gcp -M csv json-ocsf json-asff -b -z $SLACK  \
 	--output-filename prowler-gcp-${TODAY} \
 	--log-level WARNING \
 	--credentials-file gcp_creds.json \
-	--output-directory prowler-output 2>&1 > prowler-logs-${TODAY}.log"
+	--output-directory prowler-output 2>&1 | tee prowler-logs-${TODAY}.log"
 
 prowler gcp -M csv json-ocsf json-asff -b -z $SLACK  \
 	--checks-file checks.json \
@@ -71,22 +71,21 @@ prowler gcp -M csv json-ocsf json-asff -b -z $SLACK  \
 	--output-filename prowler-gcp-${TODAY} \
 	--log-level WARNING \
 	--credentials-file gcp_creds.json \
-	--output-directory prowler-output 2> prowler-errors-${TODAY}.log > prowler-logs-${TODAY}.log
+	--output-directory prowler-output 2>&1 | tee prowler-logs-${TODAY}.log
 RC=$?
 
 END=`date +%s`
-DUR=`expr $END - $START`
+DUR=`expr $END - $qSTART`
 
 aws s3 sync prowler-output/ s3://${OUTPUT_BUCKET}/prowler-gcp-output/$GCP_CREDS/
 
 # cat prowler-logs-${ACCOUNT_ID}-${TODAY}.json  # Send this to CWL
-grep "Enable it by visiting" prowler-logs-${TODAY}.log
+# grep "Enable it by visiting" prowler-logs-${TODAY}.log
 
 # # Archive everything because storage is cheap or something
 aws s3 cp prowler-logs-${TODAY}.log s3://${OUTPUT_BUCKET}/prowler-gcp-logs/
 aws s3 cp prowler-logs-${TODAY}.json s3://${OUTPUT_BUCKET}/prowler-gcp-logs/
-aws s3 cp prowler-errors-${TODAY}.log s3://${OUTPUT_BUCKET}/prowler-gcp-logs/
 
-echo "Log of run can be found at s3://${OUTPUT_BUCKET}/prowler-gcp-logs/prowler-errors-${TODAY}.log"
+echo "Log of run can be found at s3://${OUTPUT_BUCKET}/prowler-gcp-logs/prowler-logs-${TODAY}.log"
 echo "Prowler Exited with error code $RC after $DUR seconds"
 
