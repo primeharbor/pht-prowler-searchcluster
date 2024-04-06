@@ -95,6 +95,10 @@ Parameters:
     Type: String
     Description: ECSCluster Arn from the Prowler Stack
 
+  pECSClusterName:
+    Type: String
+    Description: ECSCluster Name from the Prowler Stack
+
   pContainerSecurityGroup:
     Type: String
     Description: ContainerSecurityGroup ID from the Prowler Stack
@@ -285,3 +289,5 @@ Outputs:
   ProwlerBucket:
     Value: !Ref pBucketName
 
+  ECSClusterName:
+    Value: !Ref pECSClusterName

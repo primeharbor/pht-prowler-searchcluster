@@ -32,7 +32,7 @@ if [ -z $TASK_ID ] ; then
     exit 1
 fi
 
-CLUSTER=`aws cloudformation describe-stack-resources --stack-name ${STACKNAME} --output text | grep ECSCluster | awk '{print $3}'`
+CLUSTER=`aws cloudformation describe-stacks --stack-name ${STACKNAME} --query Stacks[0].Outputs --output text | grep ECSClusterName | awk '{print $2}'`
 if [ -z $CLUSTER ] ; then
     echo "Unable to find ECSCluster for Stack ${STACKNAME}. Aborting.."
     exit 1

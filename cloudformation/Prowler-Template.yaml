@@ -775,6 +775,9 @@ Outputs:
   ECSClusterArn:
     Value: !GetAtt ECSCluster.Arn
 
+  ECSClusterName:
+    Value: !Ref ECSCluster
+
   ContainerSecurityGroup:
     Value: !Ref ContainerSecurityGroup
 
