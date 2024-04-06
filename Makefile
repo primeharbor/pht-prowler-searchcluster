@@ -107,7 +107,7 @@ gsheet-deploy: gsheet-package
 ifndef GSHEET_MANIFEST
 	$(error GSHEET_MANIFEST is not set)
 endif
-	cft-deploy -m cloudformation/$(GSHEET_MANIFEST) --template-url $(GSHEET_TEMPLATE_URL) pTemplateURL=$(GSHEET_TEMPLATE_URL) --force
+	cft-deploy -m $(GSHEET_MANIFEST) --template-url $(GSHEET_TEMPLATE_URL) pTemplateURL=$(GSHEET_TEMPLATE_URL) --force
 
 
 #
@@ -127,5 +127,23 @@ endif
 
 clean:
 	cd lambda && $(MAKE) clean
+
+#
+# Bucket Import
+#
+prepare-import-bucket:
+	aws cloudformation create-change-set --output text \
+		--stack-name $(PROWLER_STACKNAME) \
+		--change-set-name bucket-import \
+		--parameters ParameterKey=pBucketName,ParameterValue=$(OUTPUT_BUCKET) \
+		--template-body file://cloudformation/ProwlerBucket-ImportTemplate.yaml \
+		--change-set-type IMPORT \
+		--resources-to-import ResourceType=AWS::S3::Bucket,LogicalResourceId=ProwlerBucket,ResourceIdentifier={BucketName=$(OUTPUT_BUCKET)}
+	@echo sleeping 30 seconds for changeset to execute
+	aws cloudformation describe-change-set --change-set-name bucket-import --stack-name $(PROWLER_STACKNAME)
+	@echo "If the Status is in CREATE_COMPLETE, you can perform `make execute-import-bucket`"
+
+execute-import-bucket:
+	aws cloudformation execute-change-set  --change-set-name bucket-import --stack-name $(PROWLER_STACKNAME)
 
 # EOF
