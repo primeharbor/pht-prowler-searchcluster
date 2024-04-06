@@ -171,7 +171,7 @@ Resources:
                   - Name: prefix
                     Value: "prowler-gcp-output/"
                   - Name: suffix
-                    Value: ".oscf.json"
+                    Value: ".ocsf.json"
       OwnershipControls:
         Rules:
         - ObjectOwnership: BucketOwnerEnforced
