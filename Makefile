@@ -5,8 +5,8 @@ ifndef env
 $(error env is not set)
 endif
 
-include config.$(env)
-export
+# include config.$(env)
+# export
 
 ifndef version
 	export version := $(shell date +%Y%m%d-%H%M)
@@ -88,7 +88,7 @@ prowler-deploy: prowler-package
 ifndef PROWLER_MANIFEST
 	$(error PROWLER_MANIFEST is not set)
 endif
-	cft-deploy -m cloudformation/$(PROWLER_MANIFEST) --template-url $(PROWLER_TEMPLATE_URL) pTemplateURL=$(PROWLER_TEMPLATE_URL) pImageVersion=$(IMAGE_VERSION) --force
+	cft-deploy -m $(PROWLER_MANIFEST) --template-url $(PROWLER_TEMPLATE_URL) pTemplateURL=$(PROWLER_TEMPLATE_URL) pImageVersion=$(IMAGE_VERSION) --force
 
 
 #
@@ -110,8 +110,6 @@ endif
 	cft-deploy -m cloudformation/$(GSHEET_MANIFEST) --template-url $(GSHEET_TEMPLATE_URL) pTemplateURL=$(GSHEET_TEMPLATE_URL) --force
 
 
-
-
 #
 # Regional Findings Deploy commands
 #
@@ -125,20 +123,6 @@ ifndef FINDINGS_MANIFEST
 	$(error FINDINGS_MANIFEST is not set)
 endif
 	cft-deploy -m cloudformation/$(FINDINGS_MANIFEST) --template-url $(FINDINGS_TEMPLATE_URL) pTemplateURL=$(FINDINGS_TEMPLATE_URL) --force
-
-
-#
-# Push Configs
-#
-push-config:
-	@aws s3 cp $(CONFIG_FILE) s3://$(OUTPUT_BUCKET)/config.yaml
-	@aws s3 cp $(CHECKS_FILE) s3://$(OUTPUT_BUCKET)/checks.json
-	@aws s3 cp $(METADATA_FILE) s3://$(OUTPUT_BUCKET)/metadata.yaml
-	@aws s3 cp $(ALLOW_LIST) s3://$(OUTPUT_BUCKET)/allow_list.yaml
-
-fetch-config:
-	@aws s3 cp s3://$(OUTPUT_BUCKET)/config.yaml $(CONFIG_FILE)
-	@aws s3 cp s3://$(OUTPUT_BUCKET)/checks.json $(CHECKS_FILE)
 
 
 clean:
