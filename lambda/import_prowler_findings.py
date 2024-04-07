@@ -36,9 +36,6 @@ def handler(event, context):
 
     today = dt.datetime.today().strftime('%Y-%m-%d')
 
-    # hard code for now
-    index="prowler_findings_oscf"
-
     region = os.environ['AWS_REGION']
     service = 'es'
     credentials = boto3.Session().get_credentials()
@@ -53,6 +50,14 @@ def handler(event, context):
 
     for sqs_record in event['Records']:
         finding_body = json.loads(sqs_record['body'])
+
+        if finding_body['cloud']['provider'] == "gcp":
+            index="prowler_findings_gcp"
+        elif finding_body['cloud']['provider'] == "aws":
+            index="prowler_findings_oscf"
+        else:
+            logger.warning(f"Got unsupported CloudType: {finding_body['cloud']['provider']} skipping")
+            continue
 
         if finding_body['status_code'] == "MANUAL":
             continue

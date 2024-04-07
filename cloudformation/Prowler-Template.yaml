@@ -163,6 +163,15 @@ Resources:
                     Value: "prowler4-output/json-ocsf/"
                   - Name: suffix
                     Value: ".json"
+          - Event: 's3:ObjectCreated:*'
+            Topic: !Ref GCPOutputNotificationTopic
+            Filter:
+              S3Key:
+                Rules:
+                  - Name: prefix
+                    Value: "prowler-gcp-output/"
+                  - Name: suffix
+                    Value: ".ocsf.json"
       OwnershipControls:
         Rules:
         - ObjectOwnership: BucketOwnerEnforced
@@ -175,8 +184,8 @@ Resources:
   OutputNotificationTopic:
     Type: AWS::SNS::Topic
     Properties:
-      DisplayName: !Sub "Destination of PutObject calls from ${pBucketName}"
-      TopicName: !Sub "${pBucketName}-Resources-PutObject"
+      DisplayName: !Sub "Destination of PutObject calls from ${pBucketName}/prowler4-output/json-ocsf/"
+      TopicName: !Sub "${pBucketName}-AWS-S3Events"
 
   ProwlerBucketNotificationTopicPolicy:
     Type: AWS::SNS::TopicPolicy
@@ -195,6 +204,35 @@ Resources:
           - SNS:Publish
           Resource:
           - !Ref OutputNotificationTopic
+          Condition:
+            ArnLike:
+              aws:SourceArn: !Sub "arn:aws:s3:*:*:${pBucketName}"
+            StringEquals:
+              aws:SourceAccount: !Ref AWS::AccountId
+
+  GCPOutputNotificationTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      DisplayName: !Sub "Destination of PutObject calls from ${pBucketName}/prowler-gcp-output/"
+      TopicName: !Sub "${pBucketName}-GCP-S3Events"
+
+  ProwlerBucketGCPNotificationTopicPolicy:
+    Type: AWS::SNS::TopicPolicy
+    Properties:
+      Topics:
+        - !Ref GCPOutputNotificationTopic
+      PolicyDocument:
+        Version: '2012-10-17'
+        Id: AllowProwlerBucket
+        Statement:
+        - Sid: AllowProwlerBucketPublish
+          Effect: Allow
+          Principal:
+            AWS: "*"
+          Action:
+          - SNS:Publish
+          Resource:
+          - !Ref GCPOutputNotificationTopic
           Condition:
             ArnLike:
               aws:SourceArn: !Sub "arn:aws:s3:*:*:${pBucketName}"
@@ -551,7 +589,9 @@ Resources:
           Resource: !GetAtt S3EventQueue.Arn
           Condition:
             ArnEquals:
-              aws:SourceArn: !Ref OutputNotificationTopic
+              aws:SourceArn:
+                - !Ref OutputNotificationTopic
+                - !Ref GCPOutputNotificationTopic
 
   S3EventQueueSubscription:
     Type: AWS::SNS::Subscription
@@ -560,6 +600,14 @@ Resources:
       Endpoint: !GetAtt S3EventQueue.Arn
       Protocol: sqs
       TopicArn: !Ref OutputNotificationTopic
+
+  S3EventQueueGCPSubscription:
+    Type: AWS::SNS::Subscription
+    Condition: cDeployIngestLambda
+    Properties:
+      Endpoint: !GetAtt S3EventQueue.Arn
+      Protocol: sqs
+      TopicArn: !Ref GCPOutputNotificationTopic
 
   S3EventQueueAlarm:
     Type: AWS::CloudWatch::Alarm
@@ -724,6 +772,21 @@ Outputs:
     Description: URL to the Transformed Template this stack was deployed with (for promotion to another environment)
     Value: !Ref pTemplateURL
 
+  ECSClusterArn:
+    Value: !GetAtt ECSCluster.Arn
+
+  ECSClusterName:
+    Value: !Ref ECSCluster
+
+  ContainerSecurityGroup:
+    Value: !Ref ContainerSecurityGroup
+
+  ECSEventRoleArn:
+    Value: !GetAtt ECSEventRole.Arn
+
+  ECSTaskExecutionRoleArn:
+    Value: !GetAtt ECSTaskExecutionRole.Arn
+
   ProwlerContainerTaskId:
     Value: !Ref ProwlerTaskDefinition
 
@@ -731,5 +794,11 @@ Outputs:
     Value: !GetAtt LambdaRole.Arn
     Condition: cDeployIngestLambda
 
+  ProwlerBucket:
+    Value: !Ref ProwlerBucket
+
   ProwlerBucketEventTopicArn:
     Value: !Ref OutputNotificationTopic
+
+  ProwlerBucketGCPEventTopicArn:
+    Value: !Ref GCPOutputNotificationTopic
