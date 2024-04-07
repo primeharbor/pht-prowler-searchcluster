@@ -122,6 +122,7 @@ status_code: FAIL AND (
     )
 ```
 
+
 ## Other Serious Issues that will take effort to resolve
 
 ## Ensure access keys are rotated every 90 days or less
@@ -145,6 +146,23 @@ status_code: FAIL AND (
 There are probably some cases where an EC2 instance needs direct access to the internet. But with the number of zero-days being exploited by ransomware groups, you want to limit this as much as possible.
 ```
 status_code: FAIL AND finding_info.uid: "prowler-aws-ec2_instance_public_ip*"
+```
+
+# Secrets Detection
+One feature of prowler over other CSPMs is that it attempts secrets detection
+
+## Find all the secrets
+```
+status_code: FAIL AND (
+    finding_info.uid: "prowler-aws-awslambda_function_no_secrets_in_variables *" OR
+    finding_info.uid: "prowler-aws-autoscaling_find_secrets_ec2_launch_configuration*" OR
+    finding_info.uid: "prowler-aws-cloudformation_stack_outputs_find_secrets*" OR
+    finding_info.uid: "prowler-aws-cloudwatch_log_group_no_secrets_in_logs*" OR
+    finding_info.uid: "prowler-aws-ec2_instance_secrets_user_data*" OR
+    finding_info.uid: "prowler-aws-ecs_task_definitions_no_environment_secrets*" OR
+    finding_info.uid: "prowler-aws-ssm_document_secrets*" OR
+    finding_info.uid: "prowler-aws-awslambda_function_no_secrets_in_code*"
+)
 ```
 
 
