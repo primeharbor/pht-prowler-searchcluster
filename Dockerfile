@@ -34,7 +34,6 @@ ENV HOME='/home/prowler'
 ENV PATH="$HOME/.local/bin:$PATH"
 RUN pip install --no-cache-dir --upgrade pip
 RUN git clone https://github.com/prowler-cloud/prowler.git
-RUN cd prowler ; git checkout v4
 RUN cd prowler ; pip install --no-cache-dir .
 RUN pip install awscli
 
