@@ -48,44 +48,58 @@ aws s3 cp --quiet s3://${OUTPUT_BUCKET}/metadata.yaml .
 aws s3 cp --quiet s3://${OUTPUT_BUCKET}/allow_list.yaml .
 
 TODAY=`date +%Y-%m-%d`
-START=`date +%s`
 
-echo "Starting Scan of all projects for $GCP_CREDS at epoch timestamp $START."
-echo "Command: prowler gcp -M csv json-ocsf json-asff -b -z $SLACK  \
-	--checks-file checks.json \
-	--config-file config.yaml \
-	--mutelist-file allow_list.yaml \
-	--custom-checks-metadata-file metadata.yaml \
-	--log-file prowler-logs-${TODAY}.json \
-	--output-filename prowler-gcp-${TODAY} \
-	--log-level WARNING \
-	--credentials-file gcp_creds.json \
-	--output-directory prowler-output 2>&1 | tee prowler-logs-${TODAY}.log"
+for project_id in `prowler gcp --list-project-ids --credentials-file gcp_creds.json -b -z | tail -n +2` ; do
+	# Do not scan the thousands of appscript projects
+	echo $project_id | grep ^sys- > /dev/null
+	if [[ $? -eq 0 ]] ; then
+		continue
+	fi
 
-prowler gcp -M csv json-ocsf json-asff -b -z $SLACK  \
-	--checks-file checks.json \
-	--config-file config.yaml \
-	--mutelist-file allow_list.yaml \
-	--custom-checks-metadata-file metadata.yaml \
-	--log-file prowler-logs-${TODAY}.json \
-	--output-filename prowler-gcp-${TODAY} \
-	--log-level WARNING \
-	--credentials-file gcp_creds.json \
-	--output-directory prowler-output 2>&1 | tee prowler-logs-${TODAY}.log
-RC=$?
+	START=`date +%s`
+	echo "Starting Scan of $project_id at epoch timestamp $START."
+	echo "Command: prowler gcp -M csv json-ocsf json-asff -b -z $SLACK  \
+		--project-id $project_id \
+		--checks-file checks.json \
+		--config-file config.yaml \
+		--mutelist-file allow_list.yaml \
+		--custom-checks-metadata-file metadata.yaml \
+		--log-file prowler-logs-${project_id}-${TODAY}.json \
+		--output-filename prowler-gcp-${project_id}-${TODAY} \
+		--log-level WARNING \
+		--credentials-file gcp_creds.json \
+		--output-directory prowler-output 2>&1 > prowler-logs-${project_id}-${TODAY}.log"
 
-END=`date +%s`
-DUR=`expr $END - $qSTART`
+	prowler gcp -M csv json-ocsf json-asff -b -z $SLACK \
+		--project-id $project_id \
+		--checks-file checks.json \
+		--config-file config.yaml \
+		--mutelist-file allow_list.yaml \
+		--custom-checks-metadata-file metadata.yaml \
+		--log-file prowler-logs-${project_id}-${TODAY}.json \
+		--output-filename prowler-gcp-${project_id}-${TODAY} \
+		--log-level WARNING \
+		--credentials-file gcp_creds.json \
+		--output-directory prowler-output 2>&1 > prowler-logs-${project_id}-${TODAY}.log
 
-aws s3 sync prowler-output/ s3://${OUTPUT_BUCKET}/prowler-gcp-output/$GCP_CREDS/
+	RC=$?
 
-# cat prowler-logs-${ACCOUNT_ID}-${TODAY}.json  # Send this to CWL
-# grep "Enable it by visiting" prowler-logs-${TODAY}.log
+	END=`date +%s`
+	DUR=`expr $END - $START`
 
-# # Archive everything because storage is cheap or something
-aws s3 cp prowler-logs-${TODAY}.log s3://${OUTPUT_BUCKET}/prowler-gcp-logs/
-aws s3 cp prowler-logs-${TODAY}.json s3://${OUTPUT_BUCKET}/prowler-gcp-logs/
+	# Copy Results to S3
+	aws s3 cp prowler-output/prowler-gcp-${project_id}-${TODAY}.ocsf.json   s3://${OUTPUT_BUCKET}/prowler-gcp-output/$GCP_CREDS/
+	aws s3 cp prowler-output/prowler-gcp-${project_id}-${TODAY}.csv   s3://${OUTPUT_BUCKET}/prowler-gcp-output/$GCP_CREDS/
 
-echo "Log of run can be found at s3://${OUTPUT_BUCKET}/prowler-gcp-logs/prowler-logs-${TODAY}.log"
-echo "Prowler Exited with error code $RC after $DUR seconds"
+	# Send this to CWL
+	grep "^Enable it by visiting" prowler-logs-${project_id}-${TODAY}.log
 
+	# # Archive everything because storage is cheap or something
+	aws s3 cp prowler-logs-${project_id}-${TODAY}.log s3://${OUTPUT_BUCKET}/prowler-gcp-logs/
+	aws s3 cp prowler-logs-${project_id}-${TODAY}.json s3://${OUTPUT_BUCKET}/prowler-gcp-logs/
+
+	echo "Log of run can be found at s3://${OUTPUT_BUCKET}/prowler-gcp-logs/prowler-logs-${project_id}-${TODAY}.log"
+	echo "Prowler Exited for ${project_id} with error code $RC after $DUR seconds"
+
+done
+echo "container exited at `date`"
