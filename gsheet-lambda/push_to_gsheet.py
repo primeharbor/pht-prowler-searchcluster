@@ -182,7 +182,7 @@ def process_prowler_ocsf(f):
         f['event_time'],
         f['cloud']['account']['uid'],
         f['cloud']['account']['name'],
-        "NotInOCSF", # f['CheckID'],
+        f['metadata']['event_code'],
         f['severity'],
         status,
         f['finding_info']['title'],
