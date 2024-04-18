@@ -47,6 +47,9 @@ aws s3 cp --quiet s3://${OUTPUT_BUCKET}/config.yaml .
 aws s3 cp --quiet s3://${OUTPUT_BUCKET}/metadata.yaml .
 aws s3 cp --quiet s3://${OUTPUT_BUCKET}/allow_list.yaml .
 
+# Log this in the CW Logs
+prowler --version
+
 TODAY=`date +%Y-%m-%d`
 
 for project_id in `prowler gcp --list-project-ids --credentials-file gcp_creds.json -b -z | tail -n +2` ; do
