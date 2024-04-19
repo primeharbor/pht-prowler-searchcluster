@@ -62,6 +62,9 @@ def handler(event, context):
         if finding_body['status_code'] == "MANUAL":
             continue
 
+        if 'resources' in finding_body and type(finding_body['resources']) == list and len(finding_body['resources']) > 0:
+            finding_body['resource'] = finding_body['resources'][0]
+
         logger.debug(f"Indexing finding for {finding_body['finding_info']['uid']} with a status of {finding_body['status_code']}")
 
         # Give each finding a unique document id so we can track overtime.
