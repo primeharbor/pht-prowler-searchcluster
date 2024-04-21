@@ -57,18 +57,9 @@ Parameters:
     Default: "OpenSearch_2.11"
 
   # SAML Options
-  pSAMLEntityId:
-    Description: AWS Identity Center ID for the SAML Application
-    Type: String
-    Default: "NONE"
 
-  pSAMLMetadataContent:
-    Description: AWS Identity Center SAML Metadata Document
-    Type: String
-    Default: "NONE"
-
-  pMasterBackendRoleId:
-    Description: AWS Identity Center Group _ID_ granted admin access to OpenSearch
+  pSAMLConfigSecret:
+    Description: ARN of the Secrets Manager Secret with SAML Config Information
     Type: String
     Default: "NONE"
 
@@ -84,10 +75,8 @@ Parameters:
     Default: "NONE"
 
 Conditions:
-  cEnableSAML: !And
-    - !Not [!Equals [ !Ref pSAMLEntityId, "NONE" ]]
-    - !Not [!Equals [ !Ref pSAMLMetadataContent, "NONE" ]]
-    - !Not [!Equals [ !Ref pMasterBackendRoleId, "NONE" ]]
+  cEnableSAML: !Not [!Equals [ !Ref pSAMLConfigSecret, "NONE" ]]
+
   cCustomEndpoint: !And
     - !Not [!Equals [ !Ref pCustomEndpoint, "NONE" ]]
     - !Not [!Equals [ !Ref pHostedZoneId, "NONE" ]]
@@ -126,9 +115,9 @@ Resources:
           - cEnableSAML
           - Enabled: True
             Idp:
-              EntityId: !Ref pSAMLEntityId
-              MetadataContent: !Ref pSAMLMetadataContent
-            MasterBackendRole: !Ref pMasterBackendRoleId
+              EntityId: !Sub "{{resolve:secretsmanager:${pSAMLConfigSecret}:SecretString:SAMLEntityId}}"
+              MetadataContent: !Sub "{{resolve:secretsmanager:${pSAMLConfigSecret}:SecretString:SAMLMetadataContent}}"
+            MasterBackendRole: !Sub "{{resolve:secretsmanager:${pSAMLConfigSecret}:SecretString:AdminGroupId}}"
             RolesKey: Role
             SessionTimeoutMinutes: 1440
           - Enabled: False
@@ -194,7 +183,7 @@ Resources:
     Condition: cCustomEndpoint
     Type: AWS::CertificateManager::Certificate
     Properties:
-      CertificateTransparencyLoggingPreference: DISABLED
+      CertificateTransparencyLoggingPreference: ENABLED
       DomainName: !Ref pCustomEndpoint
       DomainValidationOptions:
         - DomainName: !Ref pCustomEndpoint
