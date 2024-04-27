@@ -38,21 +38,26 @@ lambda/urllib3
 lambda/dateutil
 lambda/opensearchpy
 
+gsheet-lambda/apiclient
 gsheet-lambda/bin
+gsheet-lambda/cachetools
 gsheet-lambda/certifi*
-gsheet-lambda/google*
+gsheet-lambda/charset_normalizer
 gsheet-lambda/docs
+gsheet-lambda/google*
 gsheet-lambda/gspread
+gsheet-lambda/httplib2
+gsheet-lambda/idna
+gsheet-lambda/oauthlib
+gsheet-lambda/proto
+gsheet-lambda/pyasn*
+gsheet-lambda/pyparsing
 gsheet-lambda/requests*
 gsheet-lambda/rsa
-gsheet-lambda/pyasn*
-gsheet-lambda/oauthlib
 gsheet-lambda/scripts
-gsheet-lambda/idna
-gsheet-lambda/urllib3
 gsheet-lambda/strenum
-gsheet-lambda/cachetools
-gsheet-lambda/charset_normalizer
+gsheet-lambda/uritemplate
+gsheet-lambda/urllib3
 
 Prowler-Template-Transformed-*.yaml
 

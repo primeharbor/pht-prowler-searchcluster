@@ -34,6 +34,11 @@ GSHEET_OUTPUT_TEMPLATE_PREFIX=Prowler-to-GSheet-Template-Transformed
 GSHEET_OUTPUT_TEMPLATE=$(GSHEET_OUTPUT_TEMPLATE_PREFIX)-$(version).yaml
 GSHEET_TEMPLATE_URL ?= https://s3.amazonaws.com/$(DEPLOY_BUCKET)/$(DEPLOY_PREFIX)/$(GSHEET_OUTPUT_TEMPLATE)
 
+SCORECARD_TEMPLATE=cloudformation/Scorecards-Template.yaml
+SCORECARD_OUTPUT_TEMPLATE_PREFIX=Scorecards-Template-Transformed
+SCORECARD_OUTPUT_TEMPLATE=$(SCORECARD_OUTPUT_TEMPLATE_PREFIX)-$(version).yaml
+SCORECARD_TEMPLATE_URL ?= https://s3.amazonaws.com/$(DEPLOY_BUCKET)/$(DEPLOY_PREFIX)/$(SCORECARD_OUTPUT_TEMPLATE)
+
 FINDINGS_TEMPLATE=cloudformation/RegionalFindings-Template.yaml
 FINDINGS_OUTPUT_TEMPLATE_PREFIX=RegionalFindings-Template-Transformed
 FINDINGS_OUTPUT_TEMPLATE=$(FINDINGS_OUTPUT_TEMPLATE_PREFIX)-$(version).yaml
@@ -124,6 +129,25 @@ ifndef GSHEET_MANIFEST
 	$(error GSHEET_MANIFEST is not set)
 endif
 	cft-deploy -m $(GSHEET_MANIFEST) --template-url $(GSHEET_TEMPLATE_URL) pTemplateURL=$(GSHEET_TEMPLATE_URL) --force
+
+
+#
+# Scorecard Deploy Commands
+#
+scorecard-deps:
+	cd gsheet-lambda && $(MAKE) deps
+
+scorecard-package: scorecard-deps
+	@aws cloudformation package --template-file $(SCORECARD_TEMPLATE) --s3-bucket $(DEPLOY_BUCKET) --s3-prefix $(DEPLOY_PREFIX)/transform --output-template-file cloudformation/$(SCORECARD_OUTPUT_TEMPLATE)  --metadata build_ver=$(version)
+	@aws s3 cp cloudformation/$(SCORECARD_OUTPUT_TEMPLATE) s3://$(DEPLOY_BUCKET)/$(DEPLOY_PREFIX)/
+	rm cloudformation/$(SCORECARD_OUTPUT_TEMPLATE)
+	@echo "Deploy via $(SCORECARD_TEMPLATE_URL)"
+
+scorecard-deploy: scorecard-package
+ifndef SCORECARD_MANIFEST
+	$(error SCORECARD_MANIFEST is not set)
+endif
+	cft-deploy -m $(SCORECARD_MANIFEST) --template-url $(SCORECARD_TEMPLATE_URL) pTemplateURL=$(SCORECARD_TEMPLATE_URL) --force
 
 
 #
