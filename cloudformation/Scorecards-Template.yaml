@@ -197,7 +197,9 @@ Resources:
           Resource: !GetAtt ProwlerEventQueue.Arn
           Condition:
             ArnEquals:
-              aws:SourceArn: !Ref pProwlerOutputNotificationTopicArn
+              aws:SourceArn:
+              - !Ref pProwlerOutputNotificationTopicArn
+              - !Ref pProwlerBucketGCPEventTopicArn
 
   ProwlerEventQueueSubscription:
     Type: AWS::SNS::Subscription
