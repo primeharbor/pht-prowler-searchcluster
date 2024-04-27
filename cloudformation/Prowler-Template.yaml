@@ -71,6 +71,11 @@ Parameters:
     Type: String
     Default: "NONE"
 
+  pAlertTopicArn:
+    Description: Topic To send Alarm Actions to
+    Type: String
+    Default: NONE
+
   #
   # Fargate Related Params
   #
@@ -121,6 +126,7 @@ Parameters:
 Conditions:
   cSlackSecret: !Not [!Equals [ !Ref pSlackSecret, "NONE" ]]
   cDeployIngestLambda: !Not [!Equals [ !Ref pDomainEndpoint, "NONE" ]]
+  cAlarmActions: !Not [!Equals [ !Ref pAlertTopicArn, "NONE" ]]
 
 Globals:
   Function:
@@ -614,8 +620,6 @@ Resources:
     Condition: cDeployIngestLambda
     Properties:
       ActionsEnabled: True
-      # AlarmActions:
-      #   - String
       AlarmDescription: "Alert when Queue doesn't properly drain"
       AlarmName: !Sub "${AWS::StackName}-FileProcessQueue"
       ComparisonOperator: GreaterThanOrEqualToThreshold
@@ -625,13 +629,15 @@ Resources:
       EvaluationPeriods: 1
       MetricName: ApproximateNumberOfMessagesVisible
       Namespace: AWS/SQS
-      # OKActions:
-      #   - String
       Period: 300
       Statistic: Average
       Threshold: 3
       TreatMissingData: missing
-
+      AlarmActions:
+        - !If
+          - cAlarmActions
+          - !Ref pAlertTopicArn
+          - !Ref AWS::NoValue
 
   #
   # Finding Queue
@@ -650,8 +656,6 @@ Resources:
     Condition: cDeployIngestLambda
     Properties:
       ActionsEnabled: True
-      # AlarmActions:
-      #   - String
       AlarmDescription: "Alert when Queue doesn't properly drain"
       AlarmName: !Sub "${AWS::StackName}-FindingIngestQueue"
       ComparisonOperator: GreaterThanOrEqualToThreshold
@@ -661,12 +665,15 @@ Resources:
       EvaluationPeriods: 1
       MetricName: ApproximateNumberOfMessagesVisible
       Namespace: AWS/SQS
-      # OKActions:
-      #   - String
       Period: 300
       Statistic: Average
       Threshold: 8000
       TreatMissingData: missing
+      AlarmActions:
+        - !If
+          - cAlarmActions
+          - !Ref pAlertTopicArn
+          - !Ref AWS::NoValue
 
   #
   # Alarms
@@ -688,8 +695,11 @@ Resources:
       EvaluationPeriods: 1
       Period: 60
       TreatMissingData: "ignore"
-      # AlarmActions:
-      #   - !Ref SlackSNSTopic
+      AlarmActions:
+        - !If
+          - cAlarmActions
+          - !Ref pAlertTopicArn
+          - !Ref AWS::NoValue
 
   ProcessFindingsFileFunctionErrorAlarm:
     Type: AWS::CloudWatch::Alarm
@@ -708,8 +718,11 @@ Resources:
       EvaluationPeriods: 1
       Period: 60
       TreatMissingData: "ignore"
-      # AlarmActions:
-      #   - !Ref SlackSNSTopic
+      AlarmActions:
+        - !If
+          - cAlarmActions
+          - !Ref pAlertTopicArn
+          - !Ref AWS::NoValue
 
   ContainerLogGroup:
     Type: AWS::Logs::LogGroup
@@ -757,7 +770,6 @@ Resources:
     Properties:
       AlarmName: FailedProwlerRun
       AlarmDescription: Alarms Prowler exits non-0 for an account.
-      # AlarmActions:
       MetricName: failed_prowler_runs
       Namespace: !Ref pProwlerMetricNamespace
       ComparisonOperator: GreaterThanOrEqualToThreshold
@@ -766,6 +778,11 @@ Resources:
       Statistic: Sum
       Threshold: '1'
       TreatMissingData: notBreaching
+      AlarmActions:
+        - !If
+          - cAlarmActions
+          - !Ref pAlertTopicArn
+          - !Ref AWS::NoValue
 
 Outputs:
   TemplateURL:
