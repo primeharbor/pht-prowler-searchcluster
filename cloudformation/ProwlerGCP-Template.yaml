@@ -53,6 +53,11 @@ Parameters:
     Type: String
     Default: "NONE"
 
+  pAlertTopicArn:
+    Description: Topic To send Alarm Actions to
+    Type: String
+    Default: NONE
+
   #
   # Fargate Related Params
   #
@@ -106,6 +111,8 @@ Parameters:
 
 Conditions:
   cSlackSecret: !Not [!Equals [ !Ref pSlackSecret, "NONE" ]]
+  cAlarmActions: !Not [!Equals [ !Ref pAlertTopicArn, "NONE" ]]
+
 
 Resources:
   #
@@ -272,7 +279,6 @@ Resources:
     Properties:
       AlarmName: FailedProwlerGCPRun
       AlarmDescription: Alarms Prowler exits non-0 for an account.
-      # AlarmActions:
       MetricName: failed_prowler_gcp_runs
       Namespace: !Ref pProwlerMetricNamespace
       ComparisonOperator: GreaterThanOrEqualToThreshold
@@ -281,6 +287,11 @@ Resources:
       Statistic: Sum
       Threshold: '1'
       TreatMissingData: notBreaching
+      AlarmActions:
+        - !If
+          - cAlarmActions
+          - !Ref pAlertTopicArn
+          - !Ref AWS::NoValue
 
 Outputs:
   ProwlerContainerTaskId:
