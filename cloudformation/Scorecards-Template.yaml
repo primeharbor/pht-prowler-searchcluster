@@ -113,7 +113,6 @@ Resources:
             - secretsmanager:GetSecretValue
             Effect: Allow
 
-
   #
   # Prowler Scorecard
   #
@@ -134,6 +133,31 @@ Resources:
             Enabled: True
             Queue: !GetAtt ProwlerEventQueue.Arn
 
+  ProwlerScorecardFunctionErrorAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub ${ProwlerScorecardFunction}-LambdaErrors
+      AlarmDescription: "Alarm if lambda errors out"
+      Namespace: "AWS/Lambda"
+      MetricName: "Errors"
+      Dimensions:
+      - Name: "FunctionName"
+        Value: !Ref ProwlerScorecardFunction
+      Statistic: "Sum"
+      ComparisonOperator: "GreaterThanThreshold"
+      Threshold: 0
+      EvaluationPeriods: 1
+      Period: 60
+      TreatMissingData: "ignore"
+      AlarmActions:
+        - !Ref pAlertTopicArn
+      OKActions:
+        - !Ref pAlertTopicArn
+
+
+  #
+  # Prowler SQS Queue
+  #
   ProwlerEventQueue:
     Type: AWS::SQS::Queue
     Properties:
@@ -199,6 +223,50 @@ Resources:
       Statistic: Average
       Threshold: 3
       TreatMissingData: missing
+
+
+  #
+  # Security Hub Scorecard
+  #
+  ProcessSecHubFindingsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub "${AWS::StackName}-sechub-scorecard"
+      Description: Process Security Hub Findings to Google Sheet
+      Handler: sechub_scorecard.handler
+      Role: !GetAtt LambdaRole.Arn
+      CodeUri: ../gsheet-lambda
+      # ReservedConcurrentExecutions: 10
+      Timeout: 600
+      Events:
+        InspectorEventBridge:
+            Type: EventBridgeRule
+            Properties:
+              Pattern:
+                source:
+                  - aws.securityhub
+              State: ENABLED
+
+  ProcessSecHubFindingsFunctionErrorAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub ${ProcessSecHubFindingsFunction}-LambdaErrors
+      AlarmDescription: "Alarm if lambda errors out"
+      Namespace: "AWS/Lambda"
+      MetricName: "Errors"
+      Dimensions:
+      - Name: "FunctionName"
+        Value: !Ref ProcessSecHubFindingsFunction
+      Statistic: "Sum"
+      ComparisonOperator: "GreaterThanThreshold"
+      Threshold: 0
+      EvaluationPeriods: 1
+      Period: 60
+      TreatMissingData: "ignore"
+      AlarmActions:
+        - !Ref pAlertTopicArn
+      OKActions:
+        - !Ref pAlertTopicArn
 
 Outputs:
   TemplateURL:
