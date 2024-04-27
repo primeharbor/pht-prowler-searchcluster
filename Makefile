@@ -29,11 +29,6 @@ PROWLER_OUTPUT_TEMPLATE_PREFIX=Prowler-Template-Transformed
 PROWLER_OUTPUT_TEMPLATE=$(PROWLER_OUTPUT_TEMPLATE_PREFIX)-$(version).yaml
 PROWLER_TEMPLATE_URL ?= https://s3.amazonaws.com/$(DEPLOY_BUCKET)/$(DEPLOY_PREFIX)/$(PROWLER_OUTPUT_TEMPLATE)
 
-GSHEET_TEMPLATE=cloudformation/Prowler-to-GSheet-Template.yaml
-GSHEET_OUTPUT_TEMPLATE_PREFIX=Prowler-to-GSheet-Template-Transformed
-GSHEET_OUTPUT_TEMPLATE=$(GSHEET_OUTPUT_TEMPLATE_PREFIX)-$(version).yaml
-GSHEET_TEMPLATE_URL ?= https://s3.amazonaws.com/$(DEPLOY_BUCKET)/$(DEPLOY_PREFIX)/$(GSHEET_OUTPUT_TEMPLATE)
-
 SCORECARD_TEMPLATE=cloudformation/Scorecards-Template.yaml
 SCORECARD_OUTPUT_TEMPLATE_PREFIX=Scorecards-Template-Transformed
 SCORECARD_OUTPUT_TEMPLATE=$(SCORECARD_OUTPUT_TEMPLATE_PREFIX)-$(version).yaml
@@ -111,26 +106,6 @@ ifndef PROWLER_MANIFEST
 endif
 	cft-deploy -m $(PROWLER_MANIFEST) --template-url $(PROWLER_TEMPLATE_URL) pTemplateURL=$(PROWLER_TEMPLATE_URL) pImageVersion=$(IMAGE_VERSION) --force
 
-
-#
-# Google Sheet Deploy Commands
-#
-gsheet-deps:
-	cd gsheet-lambda && $(MAKE) deps
-
-gsheet-package: gsheet-deps
-	@aws cloudformation package --template-file $(GSHEET_TEMPLATE) --s3-bucket $(DEPLOY_BUCKET) --s3-prefix $(DEPLOY_PREFIX)/transform --output-template-file cloudformation/$(GSHEET_OUTPUT_TEMPLATE)  --metadata build_ver=$(version)
-	@aws s3 cp cloudformation/$(GSHEET_OUTPUT_TEMPLATE) s3://$(DEPLOY_BUCKET)/$(DEPLOY_PREFIX)/
-	rm cloudformation/$(GSHEET_OUTPUT_TEMPLATE)
-	@echo "Deploy via $(GSHEET_TEMPLATE_URL)"
-
-gsheet-deploy: gsheet-package
-ifndef GSHEET_MANIFEST
-	$(error GSHEET_MANIFEST is not set)
-endif
-	cft-deploy -m $(GSHEET_MANIFEST) --template-url $(GSHEET_TEMPLATE_URL) pTemplateURL=$(GSHEET_TEMPLATE_URL) --force
-
-
 #
 # Scorecard Deploy Commands
 #
@@ -148,7 +123,6 @@ ifndef SCORECARD_MANIFEST
 	$(error SCORECARD_MANIFEST is not set)
 endif
 	cft-deploy -m $(SCORECARD_MANIFEST) --template-url $(SCORECARD_TEMPLATE_URL) pTemplateURL=$(SCORECARD_TEMPLATE_URL) --force
-
 
 #
 # Regional Findings Deploy commands
