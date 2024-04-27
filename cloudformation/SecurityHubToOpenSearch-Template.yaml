@@ -103,17 +103,10 @@ Resources:
         InspectorEventBridge:
             Type: EventBridgeRule
             Properties:
-              # DeadLetterConfig: DeadLetterConfig
-              # EventBusName: String
-              # Input: String
-              # InputPath: String
-              # Name: String
               Pattern:
                 source:
                   - aws.securityhub
-              # RetryPolicy: RetryPolicy
               State: ENABLED
-              # Target: Target
 
   ProcessSecHubFindingsFunctionErrorAlarm:
     Type: AWS::CloudWatch::Alarm
