@@ -33,9 +33,7 @@ logging.getLogger('botocore').setLevel(logging.WARNING)
 logging.getLogger('boto3').setLevel(logging.WARNING)
 logging.getLogger('urllib3').setLevel(logging.WARNING)
 
-
 HEADER_ROW = ['FindingUniqueId', 'AssessmentStartTime', 'AccountId', 'AccountName', 'CheckID', "Severity", 'Status', "CheckTitle", "ServiceName", "SubServiceName", "Region", "ResourceArn", "ResourceName",  "StatusExtended"]
-
 
 
 # Lambda execution starts here
@@ -68,6 +66,9 @@ def process_file(bucket, obj_key):
     if findings_to_process is None:
         raise Exception(f"Failed to get s3://{bucket}/{obj_key}") # This will force a requeue?
 
+    # Get the Cloud Provider Type
+    cloud_provider = findings_to_process[0]['cloud']['provider']
+
     # figure out which worksheet (by date) from the S3 Object Name (thanks chatgpt)
     pattern = r'\d{4}-\d{2}-\d{2}' # Regular expression to match the date pattern
     match = re.search(pattern, obj_key)
@@ -79,7 +80,14 @@ def process_file(bucket, obj_key):
         logger.critical(f"Date not found in {obj_key}.")
         return(None)
 
-    sheet_name = f"Prowler-Scorecard-{today}"
+    if cloud_provider == "gcp":
+        sheet_name = f"GCP-Prowler-Scorecard-{today}"
+    elif cloud_provider == "aws":
+        sheet_name = f"AWS-Prowler-Scorecard-{today}"
+    else:
+        logger.critical(f"Got unsupported Cloud Provider Type: {cloud_provider}")
+        raise Exception(f"Got unsupported Cloud Provider Type: {cloud_provider}")
+
     worksheet_name = f"All-Findings"
     gsheet = open_or_create_gsheet(sheet_name, worksheet_name, HEADER_ROW)
 
@@ -90,6 +98,7 @@ def process_file(bucket, obj_key):
     try:
         worksheet = gsheet.worksheet(worksheet_name)
     except WorksheetNotFound as e:
+        logger.critical(f"Cannot find Worksheet {worksheet_name} in {sheet_name}")
         raise Exception(f"Cannot find Worksheet {worksheet_name} in {sheet_name}")
 
     row_of_rows = []

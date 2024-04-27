@@ -38,6 +38,10 @@ Parameters:
     Description: ARN of the SNS Topic with the S3 Event Notifications from Prowler
     Type: String
 
+  pProwlerBucketGCPEventTopicArn:
+    Description: ARN of the SNS Topic with the GCP S3 Event Notifications from Prowler
+    Type: String
+
   pAlertTopicArn:
     Description: Topic for Any Alerts or Alarms to be sent to
     Type: String
@@ -119,7 +123,7 @@ Resources:
   ProwlerScorecardFunction:
     Type: AWS::Serverless::Function
     Properties:
-      FunctionName: !Sub "${AWS::StackName}-generate-scorecard"
+      FunctionName: !Sub "${AWS::StackName}-prowler-scorecard"
       Description: Add Prowler Findings to Google Sheet
       Handler: prowler_scorecard.handler
       Role: !GetAtt LambdaRole.Arn
@@ -224,6 +228,12 @@ Resources:
       Threshold: 3
       TreatMissingData: missing
 
+  ProwlerGCPEventQueueSubscription:
+    Type: AWS::SNS::Subscription
+    Properties:
+      Endpoint: !GetAtt ProwlerEventQueue.Arn
+      Protocol: sqs
+      TopicArn: !Ref pProwlerBucketGCPEventTopicArn
 
   #
   # Security Hub Scorecard
