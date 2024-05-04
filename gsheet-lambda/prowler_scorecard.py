@@ -104,19 +104,23 @@ def process_file(bucket, obj_key):
     row_of_rows = []
     count = 0
 
-    logger.info(f"{len(findings_to_process)} findings to process in s3://{bucket}/{obj_key}")
-    for f in findings_to_process:
-        row = process_prowler_ocsf(f)
+    try:
+        logger.info(f"{len(findings_to_process)} findings to process in s3://{bucket}/{obj_key}")
+        for f in findings_to_process:
+            row = process_prowler_ocsf(f)
 
-        if row is not None:
-            row_of_rows.append(row)
-        if len(row_of_rows) >= BATCH_SIZE:
-            count += write_to_gsheet(worksheet, row_of_rows)
-            row_of_rows = []
+            if row is not None:
+                row_of_rows.append(row)
+            if len(row_of_rows) >= BATCH_SIZE:
+                count += write_to_gsheet(worksheet, row_of_rows)
+                row_of_rows = []
 
-    # Write the remaining data for this file
-    count += write_to_gsheet(worksheet, row_of_rows)
-    row_of_rows = []
+        # Write the remaining data for this file
+        count += write_to_gsheet(worksheet, row_of_rows)
+        row_of_rows = []
+    except Exception as e:
+        logger.critical(f"Failed to write rows: {row_of_rows} with error {e}")
+        exit(1)
 
     logger.info(f"Processed {count} records from {obj_key}")
 
@@ -146,7 +150,7 @@ def process_prowler_ocsf(f):
         f['resources'][0]['region'],
         f['resources'][0]['uid'],
         f['resources'][0]['name'],
-        f['status_detail'],
+        f['status_detail'][:512],
     ]
     return(row)
 
