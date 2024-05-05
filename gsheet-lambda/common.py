@@ -129,7 +129,7 @@ def open_or_create_gsheet(sheet_name, worksheet_name, header_row):
 
     except Exception as e:
         logger.critical(f"Failed to open Google Sheet: {e}")
-        return(None)
+        raise
 
 def getSecret(secretName):
     """

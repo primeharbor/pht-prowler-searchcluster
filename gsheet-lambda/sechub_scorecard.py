@@ -40,21 +40,8 @@ PRODUCTS = ["GuardDuty", "Macie"]
 def handler(event, context):
     logger.debug("Received event: " + json.dumps(event, sort_keys=True))
 
-    # Create a new Sheet for each month
-    month = f"{datetime.now().year}-{datetime.now().month}"
-
-    sheet_name = f"SecurityHub-Scorecard-{month}"
-    worksheet_name = f"All-Findings"
-    gsheet = open_or_create_gsheet(sheet_name, worksheet_name, HEADER_ROW)
-
-    if gsheet is None:
-        logger.critical(f"Failed to open {sheet_name}. Aborting...")
-        raise Exception(f"Failed to open {sheet_name}. Aborting...")
-
-    try:
-        worksheet = gsheet.worksheet(worksheet_name)
-    except WorksheetNotFound as e:
-        raise Exception(f"Cannot find Worksheet {worksheet_name} in {sheet_name}")
+    # Only open the sheet if necessary
+    worksheet = None
 
     row_of_rows = []
     count = 0
@@ -73,15 +60,33 @@ def handler(event, context):
         if row is not None:
             row_of_rows.append(row)
         if len(row_of_rows) >= BATCH_SIZE:
+            if worksheet is None:
+                worksheet = open_worksheet()
             count += write_to_gsheet(worksheet, row_of_rows)
             row_of_rows = []
 
     # Write the remaining data for this file
+    if worksheet is None:
+        worksheet = open_worksheet()
     count += write_to_gsheet(worksheet, row_of_rows)
     row_of_rows = []
 
     logger.info(f"Processed {count} findings from SecurityHub")
 
+
+def open_worksheet():
+    # Create a new Sheet for each month
+    month = f"{datetime.now().year}-{datetime.now().month}"
+
+    sheet_name = f"SecurityHub-Scorecard-{month}"
+    worksheet_name = f"All-Findings"
+    gsheet = open_or_create_gsheet(sheet_name, worksheet_name, HEADER_ROW)
+
+    try:
+        worksheet = gsheet.worksheet(worksheet_name)
+        return(worksheet)
+    except WorksheetNotFound as e:
+        raise Exception(f"Cannot find Worksheet {worksheet_name} in {sheet_name}")
 
 def process_guardduty(finding):
 
