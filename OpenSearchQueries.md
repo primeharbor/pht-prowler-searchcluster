@@ -175,3 +175,24 @@ status_code: FAIL AND (
 5. Block Public Access for AMI and Snapshots
 6. Enforce IMDSv2
 
+# All BGSH
+
+status_code: FAIL AND (
+    finding_info.uid: "prowler-aws-ec2_securitygroup_allow_ingress_from_internet_to_tcp_port_3389*"
+    OR finding_info.uid: "prowler-aws-ec2_securitygroup_allow_ingress_from_internet_to_tcp_port_sql_server_1433_1434*"
+    OR finding_info.uid: "prowler-aws-s3_bucket_policy_public_write_access*"
+    OR finding_info.uid: "prowler-aws-s3_bucket_public_write_acl*"
+    OR finding_info.uid: "prowler-aws-eks_endpoints_not_publicly_accessible*"
+    OR finding_info.uid: "prowler-aws-rds_snapshots_public_access*"
+    OR finding_info.uid: "prowler-aws-ec2_ebs_public_snapshot*"
+    OR finding_info.uid: "prowler-aws-ec2_ami_public*"
+    OR finding_info.uid: "prowler-aws-ec2_securitygroup_allow_ingress_from_internet_to_tcp_port_3389*"
+    OR finding_info.uid: "prowler-aws-ec2_securitygroup_allow_ingress_from_internet_to_tcp_port_22*"
+    OR finding_info.uid: "prowler-aws-s3_bucket_public_list_acl*"
+    OR finding_info.uid: "prowler-aws-iam_no_root_access_key*"
+    OR finding_info.uid: "prowler-aws-iam_avoid_root_usage*"
+    OR finding_info.uid: "prowler-aws-iam_root_mfa_enabled*"
+    OR finding_info.uid: "prowler-aws-iam_user_mfa_enabled_console_access*"
+    OR finding_info.uid: "prowler-aws-s3_bucket_public_access*"
+    OR finding_info.uid: "prowler-aws-route53_dangling_ip_subdomain_takeover*"
+)
