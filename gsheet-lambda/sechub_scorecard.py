@@ -46,6 +46,10 @@ def handler(event, context):
     row_of_rows = []
     count = 0
 
+    if 'detail' not in event or 'findings' not in event['detail']:
+        logger.warning(f"Nothing to process in this event: {event}")
+        return(True)
+
     # Only grab the detail from the event. The other stuff is related to the eventbridge event wraper
     for finding in event['detail']['findings']:
 
@@ -65,11 +69,12 @@ def handler(event, context):
             count += write_to_gsheet(worksheet, row_of_rows)
             row_of_rows = []
 
-    # Write the remaining data for this file
-    if worksheet is None:
-        worksheet = open_worksheet()
-    count += write_to_gsheet(worksheet, row_of_rows)
-    row_of_rows = []
+    if len(row_of_rows) > 0:
+        # Write the remaining data for this file
+        if worksheet is None:
+            worksheet = open_worksheet()
+        count += write_to_gsheet(worksheet, row_of_rows)
+        row_of_rows = []
 
     logger.info(f"Processed {count} findings from SecurityHub")
 
