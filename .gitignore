@@ -37,6 +37,7 @@ lambda/idna
 lambda/urllib3
 lambda/dateutil
 lambda/opensearchpy
+lambda/events
 
 gsheet-lambda/apiclient
 gsheet-lambda/bin
