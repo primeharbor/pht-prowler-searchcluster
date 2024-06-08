@@ -23,6 +23,9 @@ endif
 IMAGENAME ?= prowler
 DEPLOY_PREFIX ?= deploy-packages
 
+CONTAINER_TAG="v$(PROWLER_VERSION)-$(version)"
+
+
 # Local to this Makefile Vars
 PROWLER_TEMPLATE=cloudformation/Prowler-Template.yaml
 PROWLER_OUTPUT_TEMPLATE_PREFIX=Prowler-Template-Transformed
@@ -43,16 +46,16 @@ FINDINGS_TEMPLATE_URL ?= https://s3.amazonaws.com/$(DEPLOY_BUCKET)/$(DEPLOY_PREF
 # Prowler Container Targets
 #
 build:
-	docker build -t $(IMAGENAME) .
+	docker build --build-arg PROWLER_VERSION=$(PROWLER_VERSION) -t $(IMAGENAME) .
 
 force-build:
-	docker build --no-cache -t $(IMAGENAME) .
+	docker build --no-cache --build-arg PROWLER_VERSION=$(PROWLER_VERSION) -t $(IMAGENAME) .
 
 build-gcp:
-	docker build -t $(IMAGENAME) -f Dockerfile-GCP .
+	docker build -t $(IMAGENAME) --build-arg PROWLER_VERSION=$(GCP_PROWLER_VERSION) -f Dockerfile-GCP .
 
 force-build-gcp:
-	docker build --no-cache -t $(IMAGENAME)  -f Dockerfile-GCP .
+	docker build --no-cache -t $(IMAGENAME) --build-arg PROWLER_VERSION=$(GCP_PROWLER_VERSION)  -f Dockerfile-GCP .
 
 run: stop
 	docker run -it -v ./prowler-output:/home/prowler/prowler-output \
@@ -78,9 +81,9 @@ ifndef IMAGE_ID
 endif
 	$(eval AWS_ACCOUNT_ID := $(shell aws sts get-caller-identity --query Account --output text ))
 	aws ecr get-login-password --region $(AWS_DEFAULT_REGION) | docker login --username AWS --password-stdin $(AWS_ACCOUNT_ID).dkr.ecr.$(AWS_DEFAULT_REGION).amazonaws.com
-	docker tag $(IMAGE_ID) $(AWS_ACCOUNT_ID).dkr.ecr.$(AWS_DEFAULT_REGION).amazonaws.com/$(IMAGENAME):$(version)
-	docker push $(AWS_ACCOUNT_ID).dkr.ecr.$(AWS_DEFAULT_REGION).amazonaws.com/$(IMAGENAME):$(version)
-	@echo "Now go set the IMAGE_VERSION to $(version)"
+	docker tag $(IMAGE_ID) $(AWS_ACCOUNT_ID).dkr.ecr.$(AWS_DEFAULT_REGION).amazonaws.com/$(IMAGENAME):$(CONTAINER_TAG)
+	docker push $(AWS_ACCOUNT_ID).dkr.ecr.$(AWS_DEFAULT_REGION).amazonaws.com/$(IMAGENAME):$(CONTAINER_TAG)
+	@echo "Now go set the IMAGE_VERSION to $(CONTAINER_TAG)"
 
 container: build push
 gcp-container: build-gcp push

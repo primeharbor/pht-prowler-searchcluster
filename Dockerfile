@@ -14,6 +14,7 @@
 
 FROM python:3.11
 
+ARG PROWLER_VERSION
 LABEL maintainer="https://github.com/primeharbor/pht-prowler-searchcluster"
 
 # Create nonroot user
@@ -34,7 +35,7 @@ ENV HOME='/home/prowler'
 ENV PATH="$HOME/.local/bin:$PATH"
 RUN pip install --no-cache-dir --upgrade pip
 RUN git clone https://github.com/prowler-cloud/prowler.git
-RUN cd prowler ; pip install --no-cache-dir .
+RUN cd prowler ; git checkout "tags/${PROWLER_VERSION}" ; pip install --no-cache-dir .
 RUN pip install awscli
 
 CMD /home/prowler/scan_organization.sh
