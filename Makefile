@@ -20,6 +20,10 @@ ifndef version
 	export version := $(shell date +%Y%m%d-%H%M)
 endif
 
+ifndef PROWLER_VERSION
+$(error PROWLER_VERSION is not set)
+endif
+
 IMAGENAME ?= prowler
 DEPLOY_PREFIX ?= deploy-packages
 
