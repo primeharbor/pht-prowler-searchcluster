@@ -63,6 +63,9 @@ run: stop
 		-e ROLENAME -e PAYER_ID -e GCP_CREDS -e OUTPUT_BUCKET \
 		--entrypoint bash $(IMAGENAME)
 
+list-checks-json: stop
+	docker run -it --entrypoint prowler $(IMAGENAME) aws --list-checks-json
+
 build-run: stop build run
 
 list:
