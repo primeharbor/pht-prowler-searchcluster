@@ -46,10 +46,15 @@ Parameters:
     Description: Topic for Any Alerts or Alarms to be sent to
     Type: String
 
+  pLambdaSize:
+    Description: Memory/CPU Size of the Ingestion Lambda
+    Type: String
+    Default: 2048
+
 Globals:
   Function:
     Runtime: python3.12
-    MemorySize: 2048
+    MemorySize: !Ref pLambdaSize
     Environment:
       Variables:
           BUCKET: !Ref pBucketName
@@ -128,7 +133,7 @@ Resources:
       Handler: prowler_scorecard.handler
       Role: !GetAtt LambdaRole.Arn
       CodeUri: ../gsheet-lambda
-      Timeout: 600
+      Timeout: 900
       Events:
         SQSIngest:
           Type: SQS
@@ -249,7 +254,7 @@ Resources:
       Role: !GetAtt LambdaRole.Arn
       CodeUri: ../gsheet-lambda
       # ReservedConcurrentExecutions: 10
-      Timeout: 600
+      Timeout: 900
       Events:
         InspectorEventBridge:
             Type: EventBridgeRule
