@@ -173,7 +173,7 @@ Resources:
       # Any messages older than an hour are probably out-of-date
       MessageRetentionPeriod: 36000
       ReceiveMessageWaitTimeSeconds: 10
-      VisibilityTimeout: 750
+      VisibilityTimeout: 900
 
   ProwlerEventQueuePolicy:
     Type: AWS::SQS::QueuePolicy
