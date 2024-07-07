@@ -57,10 +57,12 @@ def list_google_sheets(args):
                 parents_str = str(parent_names[0])
             else:
                 parents_str = 'No parent folder'
-            # parents_str = str(item.get('parents', []))
-            if 'driveId' not in item:
-                item['driveId'] = "N/A"
-            print(f"\t{item['name']} ({item['id']}), Parent Folder: {parents_str}, DriveID: {item['driveId']}")
+
+            drive_name = "N/A"
+            if 'driveId' in item:
+                drive_name = get_drive_name(item['driveId'], service)
+
+            print(f"\t{item['name']} ({item['id']}), Parent Folder: {parents_str}, DriveID: {drive_name}")
             logger.debug(json.dumps(item))
 
 
@@ -71,6 +73,15 @@ def get_folder_name(folder_id, service):
     except Exception as e:
         logger.debug(f"get_folder_name(): An error occurred: {e}")
         return folder_id
+
+
+def get_drive_name(drive_id, service):
+    try:
+        drive = service.drives().get(driveId=drive_id, fields='name').execute()
+        return drive['name']
+    except Exception as e:
+        logger.debug(f"An error occurred: {e}")
+        return drive_id
 
 
 def do_args():
