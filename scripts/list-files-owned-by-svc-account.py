@@ -17,15 +17,14 @@
 # ChatGPT wrote most of this
 
 import os
+import json
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 
 import logging
 logger = logging.getLogger()
 logger.setLevel(getattr(logging, os.getenv('LOG_LEVEL', default='INFO')))
-logging.getLogger('botocore').setLevel(logging.WARNING)
-logging.getLogger('boto3').setLevel(logging.WARNING)
-logging.getLogger('urllib3').setLevel(logging.WARNING)
+logging.getLogger('googleapiclient').setLevel(logging.WARNING)
 
 # Scopes required for accessing Google Drive
 SCOPES = ['https://www.googleapis.com/auth/drive.readonly']
@@ -36,8 +35,15 @@ def list_google_sheets(args):
     creds = service_account.Credentials.from_service_account_file(args.service_account_cred_file, scopes=SCOPES)
     service = build('drive', 'v3', credentials=creds)
 
-    query = "mimeType='application/vnd.google-apps.spreadsheet'"
-    results = service.files().list(q=query, pageSize=100, fields="nextPageToken, files(id, name)").execute()
+    if args.mine:
+        query = f"mimeType='application/vnd.google-apps.spreadsheet' and '{creds.service_account_email}' in owners"
+    else:
+        query = "mimeType='application/vnd.google-apps.spreadsheet'"
+
+    results = service.files().list(q=query, pageSize=100,
+        fields="nextPageToken, files(id, name, parents, ownedByMe, teamDriveId, driveId)",
+        corpora='allDrives', includeItemsFromAllDrives=True, supportsAllDrives=True
+        ).execute()
     items = results.get('files', [])
 
     if not items:
@@ -45,13 +51,33 @@ def list_google_sheets(args):
     else:
         print('Google Sheets:')
         for item in items:
-            print(f"{item['name']} ({item['id']})")
+            parents = item.get('parents', [])
+            if parents:
+                parent_names = [get_folder_name(parent, service) for parent in parents]
+                parents_str = str(parent_names[0])
+            else:
+                parents_str = 'No parent folder'
+            # parents_str = str(item.get('parents', []))
+            if 'driveId' not in item:
+                item['driveId'] = "N/A"
+            print(f"\t{item['name']} ({item['id']}), Parent Folder: {parents_str}, DriveID: {item['driveId']}")
+            logger.debug(json.dumps(item))
+
+
+def get_folder_name(folder_id, service):
+    try:
+        folder = service.files().get(fileId=folder_id, fields='name').execute()
+        return folder['name']
+    except Exception as e:
+        logger.debug(f"get_folder_name(): An error occurred: {e}")
+        return folder_id
 
 
 def do_args():
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument("--debug", help="print debugging info", action='store_true')
+    parser.add_argument("--mine", help="Only Show files the service account owns", action='store_true')
     parser.add_argument("--service-account-cred-file", help="Credentials File", required=True)
 
     args = parser.parse_args()
