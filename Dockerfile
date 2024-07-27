@@ -29,14 +29,17 @@ COPY scripts/enable_prowler_securityhub_integration.py /home/prowler/enable_prow
 RUN chown prowler /home/prowler/scan_organization.sh /home/prowler/enable_prowler_securityhub_integration.py /home/prowler/scan_account.sh
 RUN chmod 755 /home/prowler/scan_organization.sh /home/prowler/enable_prowler_securityhub_integration.py /home/prowler/scan_account.sh
 
+COPY scripts/install_prowler.sh /home/prowler/install_prowler.sh
+RUN chown prowler /home/prowler/install_prowler.sh
+RUN chmod 755 /home/prowler/install_prowler.sh
+
 # Install prowler as prowler
 USER prowler
 WORKDIR /home/prowler
 ENV HOME='/home/prowler'
 ENV PATH="$HOME/.local/bin:$PATH"
 RUN pip install --no-cache-dir --upgrade pip
-RUN git clone https://github.com/prowler-cloud/prowler.git
-RUN cd prowler ; git checkout "tags/${PROWLER_VERSION}" ; pip install --no-cache-dir .
+RUN /home/prowler/install_prowler.sh ${PROWLER_VERSION}
 RUN pip install awscli
 
 CMD /home/prowler/scan_organization.sh
