@@ -27,7 +27,7 @@ endif
 IMAGENAME ?= prowler
 DEPLOY_PREFIX ?= deploy-packages
 
-CONTAINER_TAG="v$(PROWLER_VERSION)-$(version)"
+CONTAINER_TAG ?= "v$(PROWLER_VERSION)-$(version)"
 
 
 # Local to this Makefile Vars
@@ -84,7 +84,7 @@ repo:
 
 push:
 ifndef IMAGE_ID
-	$(eval IMAGE_ID := $(shell docker images $(IMAGENAME) --format "{{.ID}}" ))
+	$(eval IMAGE_ID := $(shell docker images $(IMAGENAME):latest --format "{{.ID}}" ))
 endif
 	$(eval AWS_ACCOUNT_ID := $(shell aws sts get-caller-identity --query Account --output text ))
 	aws ecr get-login-password --region $(AWS_DEFAULT_REGION) | docker login --username AWS --password-stdin $(AWS_ACCOUNT_ID).dkr.ecr.$(AWS_DEFAULT_REGION).amazonaws.com
