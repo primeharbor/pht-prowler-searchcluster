@@ -22,6 +22,10 @@ Parameters:
     Description: Name of the bucket to hold the prowler results
     Type: String
 
+  pTableName:
+    Description: Name of the DDB table to track the prowler results
+    Type: String
+
   pAuditRoleName:
     Description: Default name of the AssumeRole to assume into accounts
     Type: String
@@ -674,6 +678,43 @@ Resources:
           - cAlarmActions
           - !Ref pAlertTopicArn
           - !Ref AWS::NoValue
+
+  #
+  # DynamoDB resources
+  #
+  ProwlerFindingsTrackingTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Ref pTableName
+      AttributeDefinitions:
+        - AttributeName: finding_info.uid
+          AttributeType: S
+        - AttributeName: cloud.account.uid
+          AttributeType: S
+        - AttributeName: metadata.event_code
+          AttributeType: S
+      KeySchema:
+        - AttributeName: finding_info.uid
+          KeyType: HASH
+      BillingMode: PAY_PER_REQUEST
+      GlobalSecondaryIndexes:
+        - IndexName: "CloudAccountIndex"
+          KeySchema:
+            - AttributeName: "cloud.account.uid"
+              KeyType: "HASH"
+            - AttributeName: "metadata.event_code"
+              KeyType: "RANGE"
+          Projection:
+            ProjectionType: "ALL"
+        - IndexName: "EventCodeIndex"
+          KeySchema:
+            - AttributeName: "metadata.event_code"
+              KeyType: "HASH"
+          Projection:
+            ProjectionType: "ALL"
+      StreamSpecification:
+        StreamViewType: NEW_IMAGE
+    DeletionPolicy: RetainExceptOnCreate
 
   #
   # Alarms
