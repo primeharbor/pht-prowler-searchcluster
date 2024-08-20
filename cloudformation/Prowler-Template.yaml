@@ -616,6 +616,7 @@ Resources:
             Effect: Allow
 
   DecorateFindingsFunction:
+    Type: AWS::Serverless::Function
     Properties:
       FunctionName: !Sub "${AWS::StackName}-decorator"
       Description: Decorate prowler findings with additional tracking data from DDB
