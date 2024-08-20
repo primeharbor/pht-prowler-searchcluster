@@ -726,7 +726,7 @@ Resources:
             ArnEquals:
               aws:SourceArn:
                 - !Ref OutputNotificationTopic
-
+                
   S3EventDecoratorQueueAlarm:
     Type: AWS::CloudWatch::Alarm
     Properties:
