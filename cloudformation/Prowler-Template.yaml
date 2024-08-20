@@ -559,6 +559,152 @@ Resources:
         Variables:
           FINDING_QUEUE_URL: !Ref FindingIngestEventQueue
 
+  DecoratorLambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service:
+            - lambda.amazonaws.com
+          Action:
+          - sts:AssumeRole
+      Path: /
+      Policies:
+      - PolicyName: S3Access
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Action:
+            - s3:PutObject
+            - s3:GetObject
+            Effect: Allow
+            Resource:
+              - !Sub 'arn:aws:s3:::${pBucketName}/*'
+              - !Sub 'arn:aws:s3:::${pBucketName}'
+      - PolicyName: LambdaLogging
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Resource: '*'
+            Action:
+            - logs:*
+            Effect: Allow
+      - PolicyName: GetMessages
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Resource:
+            - !GetAtt S3EventDecoratorQueue.Arn
+            Action:
+            - sqs:ReceiveMessage
+            - sqs:DeleteMessage
+            - sqs:GetQueueAttributes
+            Effect: Allow
+      - PolicyName: DDBFindingTracking
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Resource:
+            - !GetAtt ProwlerFindingsTrackingTable.Arn
+            Action:
+            - dynamodb:Query
+            - dynamodb:PutItem
+            - dynamodb:UpdateItem
+            Effect: Allow
+
+  DecorateFindingsFunction:
+    Properties:
+      FunctionName: !Sub "${AWS::StackName}-decorator"
+      Description: Decorate prowler findings with additional tracking data from DDB
+      Handler: decorate_prowler_findings.handler
+      Role: !GetAtt LambdaRole.Arn
+      CodeUri: ../lambda
+      Timeout: 900
+      Events:
+        SQSIngest:
+          Type: SQS
+          Properties:
+            BatchSize: 1
+            Enabled: True
+            Queue: !GetAtt S3EventDecoratorQueue.Arn
+      Environment:
+        Variables:
+          TRACKING_TABLE_NAME: !Ref ProwlerFindingsTrackingTable
+
+  #
+  # Decorator S3 -> SNS -> SQS -> Lambda Plumbing
+  #
+  S3EventDecoratorQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      # Any messages older than an hour are probably out-of-date
+      MessageRetentionPeriod: 36000
+      ReceiveMessageWaitTimeSeconds: 10
+      VisibilityTimeout: 750
+  
+  S3EventDecoratorQueueSubscription:
+    Type: AWS::SNS::Subscription
+    Properties:
+      Endpoint: !GetAtt S3EventDecoratorQueue.Arn
+      Protocol: sqs
+      TopicArn: !Ref OutputNotificationTopic # topic for "prowler4-output/json-ocsf/" events
+
+  S3EventDecoratorQueuePolicy:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      Queues:
+        - !Ref S3EventDecoratorQueue
+      PolicyDocument:
+        Version: '2012-10-17'
+        Id: AllowS3
+        Statement:
+        - Sid: AllowS3EventNotification
+          Effect: Allow
+          Principal:
+            AWS: '*'
+          Action:
+          - SQS:SendMessage
+          Resource: !GetAtt S3EventDecoratorQueue.Arn
+          Condition:
+            ArnLike:
+              aws:SourceArn: !Sub "arn:aws:s3:*:*:${pBucketName}"
+        - Sid: Allow-SNS-SendMessage
+          Effect: Allow
+          Principal: "*"
+          Action:
+          - sqs:SendMessage
+          Resource: !GetAtt S3EventDecoratorQueue.Arn
+          Condition:
+            ArnEquals:
+              aws:SourceArn:
+                - !Ref OutputNotificationTopic
+  
+  S3EventDecoratorQueueAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      ActionsEnabled: True
+      AlarmDescription: "Alert when decorator Queue doesn't properly drain"
+      AlarmName: !Sub "${AWS::StackName}-DecoratorFileProcessQueue"
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      Dimensions:
+        - Name: QueueName
+          Value: !GetAtt S3EventDecoratorQueue.QueueName
+      EvaluationPeriods: 1
+      MetricName: ApproximateNumberOfMessagesVisible
+      Namespace: AWS/SQS
+      Period: 300
+      Statistic: Average
+      Threshold: 3
+      TreatMissingData: missing
+      AlarmActions:
+        - !If
+          - cAlarmActions
+          - !Ref pAlertTopicArn
+          - !Ref AWS::NoValue
+
   #
   # S3 -> SNS -> SQS -> Lambda Plumbing
   #
@@ -753,6 +899,28 @@ Resources:
       Dimensions:
       - Name: "FunctionName"
         Value: !Ref ProcessFindingsFileFunction
+      Statistic: "Sum"
+      ComparisonOperator: "GreaterThanThreshold"
+      Threshold: 0
+      EvaluationPeriods: 1
+      Period: 60
+      TreatMissingData: "ignore"
+      AlarmActions:
+        - !If
+          - cAlarmActions
+          - !Ref pAlertTopicArn
+          - !Ref AWS::NoValue
+
+  DecorateFindingsFunctionErrorAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub ${DecorateFindingsFunction}-LambdaErrors
+      AlarmDescription: "Alarm if lambda errors out"
+      Namespace: "AWS/Lambda"
+      MetricName: "Errors"
+      Dimensions:
+      - Name: "FunctionName"
+        Value: !Ref DecorateFindingsFunction
       Statistic: "Sum"
       ComparisonOperator: "GreaterThanThreshold"
       Threshold: 0
