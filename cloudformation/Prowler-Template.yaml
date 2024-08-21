@@ -621,7 +621,7 @@ Resources:
       FunctionName: !Sub "${AWS::StackName}-decorator"
       Description: Decorate prowler findings with additional tracking data from DDB
       Handler: decorate_prowler_findings.handler
-      Role: !GetAtt LambdaRole.Arn
+      Role: !GetAtt DecoratorLambdaRole.Arn
       CodeUri: ../lambda
       Timeout: 900
       Events:
@@ -644,7 +644,7 @@ Resources:
       # Any messages older than an hour are probably out-of-date
       MessageRetentionPeriod: 36000
       ReceiveMessageWaitTimeSeconds: 10
-      VisibilityTimeout: 750
+      VisibilityTimeout: 1050
   
   S3EventDecoratorQueueSubscription:
     Type: AWS::SNS::Subscription
