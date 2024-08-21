@@ -19,7 +19,7 @@ from urllib.parse import unquote
 import boto3
 import json
 import os
-import requests
+from typing import Dict, List, Optional
 
 import logging
 logger = logging.getLogger()
@@ -43,6 +43,23 @@ def get_object(bucket, obj_key):
         else:
             logger.error("Error getting resource s3://{}/{}: {}".format(bucket, obj_key, e))
         return(None)
+    
+    
+def put_object(bucket: str, obj_key: str, content: bytes, **kwargs):
+    s3 = boto3.client("s3")
+    put_object_kwargs = {"Bucket": bucket, "Key": unquote(obj_key), "Body": content}
+    put_object_kwargs.update(kwargs)
+
+    try:
+        s3.put_object(**put_object_kwargs)
+    except ClientError as e:
+        logger.error(f"Error putting resource s3://{bucket}/{obj_key}: {e}")
+        raise
+
+def put_dict_object(bucket: str, obj_key: str, content: Dict, **kwargs):
+    json_content = json.dumps(content, indent=4)
+    kwargs.update({"ContentType": "application/json"})
+    put_object(bucket, obj_key, json_content, **kwargs)
 
 def get_org_account_details():
     org_client = boto3.client('organizations')
@@ -74,3 +91,35 @@ def get_org_account_details():
             return(get_org_account_details())
         else:
             raise
+
+class DynamoDBTable:
+    """
+    General wrapper for DynamoDB operations
+    """
+    def __init__(self, table_name: str) -> None:
+        self.table_name = table_name
+        dynamodb = boto3.resource("dynamodb")
+        self.table = dynamodb.Table(self.table_name)
+
+    def batch_write_items(self, items: List[Dict], batch_size: Optional[int] = 25) -> None:
+        """
+        Given a list of dictionaries, batch write them all to the table
+
+        Args:
+            items (List[Dict]): list of dictionaries to write
+            batch_size (Optional[int]): size of the batches to write. Default (and max) is 25
+        """
+        if batch_size > 25:
+            batch_size = 25
+            
+        logger.info(f"writing {len(items)} items to DynamoDB table {self.table_name}")
+
+        written_items = 0
+        for i in range(0, len(items), batch_size):
+            batch = items[i:i+batch_size]
+            written_items += len(batch)
+            with self.table.batch_writer() as batch_writer:
+                for item in batch:
+                    batch_writer.put_item(Item=item)
+        
+        logger.info(f"wrote {written_items} items to DynamoDB table {self.table_name}")
