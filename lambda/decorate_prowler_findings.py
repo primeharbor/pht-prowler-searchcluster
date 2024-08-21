@@ -40,7 +40,6 @@ logger.info("decorate_prowler_findings initiated")
 def handler(event, context):
     logger.debug("Received event: " + json.dumps(event, sort_keys=True))
 
-    logger.info(f"received {len[event['Records']]} records to process")
     for record in event["Records"]:
         body = json.loads(record["body"])
         if "Message" in body:
