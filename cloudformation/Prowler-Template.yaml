@@ -608,10 +608,12 @@ Resources:
           Version: '2012-10-17'
           Statement:
           - Resource:
-            - !GetAtt ProwlerFindingsTrackingTable.Arn
+            - !Sub "arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${ProwlerFindingsTrackingTable}"
+            - !Sub "arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${ProwlerFindingsTrackingTable}/index/*"
             Action:
             - dynamodb:Query
             - dynamodb:PutItem
+            - dynamodb:BatchWriteItem
             - dynamodb:UpdateItem
             Effect: Allow
 
@@ -634,6 +636,7 @@ Resources:
       Environment:
         Variables:
           TRACKING_TABLE_NAME: !Ref ProwlerFindingsTrackingTable
+          OUTPUT_BUCKET: !Ref ProwlerBucket
 
   #
   # Decorator S3 -> SNS -> SQS -> Lambda Plumbing
@@ -834,28 +837,28 @@ Resources:
     Properties:
       TableName: !Ref pTableName
       AttributeDefinitions:
-        - AttributeName: finding_info.uid
+        - AttributeName: finding_info_uid
           AttributeType: S
-        - AttributeName: cloud.account.uid
+        - AttributeName: cloud_account_uid
           AttributeType: S
-        - AttributeName: metadata.event_code
+        - AttributeName: metadata_event_code
           AttributeType: S
       KeySchema:
-        - AttributeName: finding_info.uid
+        - AttributeName: finding_info_uid
           KeyType: HASH
       BillingMode: PAY_PER_REQUEST
       GlobalSecondaryIndexes:
         - IndexName: "CloudAccountIndex"
           KeySchema:
-            - AttributeName: "cloud.account.uid"
+            - AttributeName: cloud_account_uid
               KeyType: "HASH"
-            - AttributeName: "metadata.event_code"
+            - AttributeName: metadata_event_code
               KeyType: "RANGE"
           Projection:
             ProjectionType: "ALL"
         - IndexName: "EventCodeIndex"
           KeySchema:
-            - AttributeName: "metadata.event_code"
+            - AttributeName: metadata_event_code
               KeyType: "HASH"
           Projection:
             ProjectionType: "ALL"
