@@ -151,7 +151,9 @@ Resources:
   ProwlerBucket:
     Type: AWS::S3::Bucket
     DeletionPolicy: RetainExceptOnCreate
-    DependsOn: ProwlerBucketNotificationTopicPolicy
+    DependsOn: 
+      - ProwlerBucketNotificationTopicPolicy
+      - ProwlerBucketProcessedFindingsNotificationTopicPolicy
     Properties:
       # AccessControl: Private
       BucketEncryption:
@@ -171,6 +173,15 @@ Resources:
                 Rules:
                   - Name: prefix
                     Value: "prowler4-output/json-ocsf/"
+                  - Name: suffix
+                    Value: ".json"
+          - Event: 's3:ObjectCreated:*'
+            Topic: !Ref ProcessedAWSFindingsNotificationTopic
+            Filter:
+              S3Key:
+                Rules:
+                  - Name: prefix
+                    Value: "prowler4-output/json-ocsf-processed/"
                   - Name: suffix
                     Value: ".json"
           - Event: 's3:ObjectCreated:*'
@@ -209,7 +220,7 @@ Resources:
         - Sid: AllowProwlerBucketPublish
           Effect: Allow
           Principal:
-            AWS: "*"
+            Service: "s3.amazonaws.com"
           Action:
           - SNS:Publish
           Resource:
@@ -220,6 +231,35 @@ Resources:
             StringEquals:
               aws:SourceAccount: !Ref AWS::AccountId
 
+  ProcessedAWSFindingsNotificationTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      DisplayName: !Sub "Destination of PutObject calls from ${pBucketName}/prowler4-output/json-ocsf-processed/"
+      TopicName: !Sub "${pBucketName}-AWS-Processed-S3Events"
+
+  ProwlerBucketProcessedFindingsNotificationTopicPolicy:
+    Type: AWS::SNS::TopicPolicy
+    Properties:
+      Topics:
+        - !Ref ProcessedAWSFindingsNotificationTopic
+      PolicyDocument:
+        Version: '2012-10-17'
+        Id: AllowProwlerBucket
+        Statement:
+        - Sid: AllowProwlerBucketPublish
+          Effect: Allow
+          Principal:
+            Service: "s3.amazonaws.com"
+          Action:
+          - SNS:Publish
+          Resource:
+          - !Ref ProcessedAWSFindingsNotificationTopic
+          Condition:
+            ArnLike:
+              aws:SourceArn: !Sub "arn:aws:s3:*:*:${pBucketName}"
+            StringEquals:
+              aws:SourceAccount: !Ref AWS::AccountId
+  
   GCPOutputNotificationTopic:
     Type: AWS::SNS::Topic
     Properties:
@@ -238,7 +278,7 @@ Resources:
         - Sid: AllowProwlerBucketPublish
           Effect: Allow
           Principal:
-            AWS: "*"
+            Service: "s3.amazonaws.com"
           Action:
           - SNS:Publish
           Resource:
@@ -1029,6 +1069,9 @@ Outputs:
 
   ProwlerBucketEventTopicArn:
     Value: !Ref OutputNotificationTopic
+
+  ProwlerBucketProcessedEventTopicArn:
+    Value: !Ref ProcessedAWSFindingsNotificationTopic
 
   ProwlerBucketGCPEventTopicArn:
     Value: !Ref GCPOutputNotificationTopic
