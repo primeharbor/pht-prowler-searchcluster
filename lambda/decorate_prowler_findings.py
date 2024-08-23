@@ -111,7 +111,9 @@ def process_account_findings(findings_to_process: List[Dict]) -> List[Dict]:
         if finding_uid not in finding_uids:
             logger.debug(f"finding uid {finding_uid} not found in dynamodb, adding to table")
             f["start_time"] = f["event_time"]
-            processed_findings.append(f)
+            ddb_finding = f
+            ddb_finding.pop("unmapped")
+            processed_findings.append(ddb_finding)
             # Don't want to add these to the output file (unnecessary), but do want them to be added to DDB
             f["finding_info_uid"] = f["finding_info"]["uid"]
             f["metadata_event_code"] = f["metadata"]["event_code"]
