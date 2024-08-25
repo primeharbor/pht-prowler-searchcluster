@@ -25,6 +25,7 @@ Parameters:
   pTableName:
     Description: Name of the DDB table to track the prowler results
     Type: String
+    Default: prowler-findings
 
   pAuditRoleName:
     Description: Default name of the AssumeRole to assume into accounts
@@ -151,7 +152,7 @@ Resources:
   ProwlerBucket:
     Type: AWS::S3::Bucket
     DeletionPolicy: RetainExceptOnCreate
-    DependsOn: 
+    DependsOn:
       - ProwlerBucketNotificationTopicPolicy
       - ProwlerBucketProcessedFindingsNotificationTopicPolicy
     Properties:
@@ -259,7 +260,7 @@ Resources:
               aws:SourceArn: !Sub "arn:aws:s3:*:*:${pBucketName}"
             StringEquals:
               aws:SourceAccount: !Ref AWS::AccountId
-  
+
   GCPOutputNotificationTopic:
     Type: AWS::SNS::Topic
     Properties:
@@ -688,7 +689,7 @@ Resources:
       MessageRetentionPeriod: 36000
       ReceiveMessageWaitTimeSeconds: 10
       VisibilityTimeout: 1050
-  
+
   S3EventDecoratorQueueSubscription:
     Type: AWS::SNS::Subscription
     Properties:
@@ -725,7 +726,7 @@ Resources:
             ArnEquals:
               aws:SourceArn:
                 - !Ref OutputNotificationTopic
-  
+
   S3EventDecoratorQueueAlarm:
     Type: AWS::CloudWatch::Alarm
     Properties:
