@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
+import copy
 import json
 import logging
 import os
@@ -94,9 +94,9 @@ def process_account_findings(findings_to_process: List[Dict]) -> List[Dict]:
         KeyConditionExpression=Key("cloud_account_uid").eq(account_id),
         ProjectionExpression="finding_info_uid, cloud_account_uid, metadata_event_code, start_time"
     )
-    finding_uids = []
+    finding_uids = {}
     for item in account_findings.get("Items", {}):
-        finding_uids.append(item.get("finding_info_uid"))
+        finding_uids[item.get("finding_info_uid")] = {"start_time": item.get("start_time")}
 
     findings_to_add = []
     processed_findings = []
@@ -108,24 +108,27 @@ def process_account_findings(findings_to_process: List[Dict]) -> List[Dict]:
             processed_findings.append(f)
             continue
         
-        if finding_uid not in finding_uids:
-            logger.debug(f"finding uid {finding_uid} not found in dynamodb, adding to table")
+        existing_finding = finding_uids.get(finding_uid, {})
+        if not existing_finding or f["event_time"] < existing_finding.get("start_time"):
+            if finding_uid not in finding_uids:
+                logger.info(f"finding uid {finding_uid} not found in dynamodb, adding to table")
+            # Handle possible scenario where incoming finding was processed out of order and the start time is earlier even though the finding has already been written to table
+            elif f["event_time"] < existing_finding.get("start_time"):
+                logger.info("finding event time is before dynamodb start time, updating table")
             f["start_time"] = f["event_time"]
-            ddb_finding = f
+            ddb_finding = copy.deepcopy(f)
             ddb_finding.pop("unmapped")
-            processed_findings.append(ddb_finding)
+            processed_findings.append(f)
             # Don't want to add these to the output file (unnecessary), but do want them to be added to DDB
-            f["finding_info_uid"] = f["finding_info"]["uid"]
-            f["metadata_event_code"] = f["metadata"]["event_code"]
-            f["cloud_account_uid"] = f["cloud"]["account"]["uid"]
-            findings_to_add.append(f)
-            continue
-        
-        logger.debug(f"finding uid {finding_uid} found in dynamodb")
-        start_time = item["start_time"]
-        logger.debug(f"finding uid {finding_uid} has a dynamodb start time of {start_time}, adding to output file")
-        f["start_time"] = item["start_time"]
-        processed_findings.append(f)
+            ddb_finding["finding_info_uid"] = ddb_finding["finding_info"]["uid"]
+            ddb_finding["metadata_event_code"] = ddb_finding["metadata"]["event_code"]
+            ddb_finding["cloud_account_uid"] = ddb_finding["cloud"]["account"]["uid"]
+            findings_to_add.append(ddb_finding)
+        # If finding already in table and the finding event time is after the existing record's start time, just write new start time to S3 output file
+        else:
+            logger.debug(f"finding uid {finding_uid} found in dynamodb and has a start time of {existing_finding.get('start_time')}, adding to output file")
+            f["start_time"] = existing_finding.get("start_time")
+            processed_findings.append(f)
 
     logger.debug(f"adding {len(findings_to_add)} findings to dynamodb")
     table_handler.batch_write_items(findings_to_add)
