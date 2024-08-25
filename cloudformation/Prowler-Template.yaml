@@ -260,7 +260,7 @@ Resources:
               aws:SourceArn: !Sub "arn:aws:s3:*:*:${pBucketName}"
             StringEquals:
               aws:SourceAccount: !Ref AWS::AccountId
-
+              
   GCPOutputNotificationTopic:
     Type: AWS::SNS::Topic
     Properties:
@@ -689,7 +689,7 @@ Resources:
       MessageRetentionPeriod: 36000
       ReceiveMessageWaitTimeSeconds: 10
       VisibilityTimeout: 1050
-
+      
   S3EventDecoratorQueueSubscription:
     Type: AWS::SNS::Subscription
     Properties:
