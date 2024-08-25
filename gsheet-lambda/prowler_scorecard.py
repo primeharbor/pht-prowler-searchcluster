@@ -33,7 +33,7 @@ logging.getLogger('botocore').setLevel(logging.WARNING)
 logging.getLogger('boto3').setLevel(logging.WARNING)
 logging.getLogger('urllib3').setLevel(logging.WARNING)
 
-HEADER_ROW = ['FindingUniqueId', 'AssessmentStartTime', 'AccountId', 'AccountName', 'CheckID', "Severity", 'Status', "CheckTitle", "ServiceName", "SubServiceName", "Region", "ResourceArn", "ResourceName",  "StatusExtended"]
+HEADER_ROW = ['FindingUniqueId', 'AssessmentStartTime', 'FindingFirstSeen', 'AgeInDays', 'AccountId', 'AccountName', 'CheckID', "Severity", 'Status', "CheckTitle", "ServiceName", "SubServiceName", "Region", "ResourceArn", "ResourceName",  "StatusExtended"]
 
 
 # Lambda execution starts here
@@ -120,7 +120,7 @@ def process_file(bucket, obj_key):
         row_of_rows = []
     except Exception as e:
         logger.critical(f"Failed to write rows: {row_of_rows} with error {e}")
-        exit(1)
+        raise
 
     logger.info(f"Processed {count} records from {obj_key}")
 
@@ -136,9 +136,25 @@ def process_prowler_ocsf(f):
     if len(f['resources']) > 1:
         logger.warning(f"Finding {f['finding_info']['uid']} has multiple resources")
 
+    if 'start_time' in f:
+        start_time=f['start_time']
+
+        # Convert the date strings to datetime objects (stolen from chatgpt)
+        date_format = "%Y-%m-%dT%H:%M:%S.%f"
+        first = datetime.strptime(f['start_time'], date_format)
+        last = datetime.strptime(f['event_time'], date_format)
+        difference = last - first
+        # Get the number of days between the dates
+        age = difference.days
+    else:
+        start_time="N/A"
+        age="N/A"
+
     row = [
         f['finding_info']['uid'],
         f['event_time'],
+        start_time,
+        age,
         f['cloud']['account']['uid'],
         f['cloud']['account']['name'],
         f['metadata']['event_code'],
