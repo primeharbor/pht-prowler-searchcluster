@@ -679,6 +679,72 @@ Resources:
           TRACKING_TABLE_NAME: !Ref ProwlerFindingsTrackingTable
           OUTPUT_BUCKET: !Ref ProwlerBucket
 
+  FindingsAlertRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service:
+            - lambda.amazonaws.com
+          Action:
+          - sts:AssumeRole
+      Path: /
+      Policies:
+      - PolicyName: LambdaLogging
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Resource: '*'
+            Action:
+            - logs:*
+            Effect: Allow
+      - PolicyName: DDBStreamRead
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:DescribeStream
+                - dynamodb:GetRecords
+                - dynamodb:GetShardIterator
+                - dynamodb:ListStreams
+              Resource:
+                - !GetAtt ProwlerFindingsTrackingTable.StreamArn
+      - PolicyName: AccessSlackSecret
+        PolicyDocument:
+          Statement:
+          - Effect: Allow
+            Action:
+              - ssm:GetParameters
+              - secretsmanager:GetSecretValue
+              - kms:Decrypt
+            Resource: !Sub "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:${pSlackSecret}*"
+
+  FindingsAlertFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub "${AWS::StackName}-findings-alert"
+      Description: Send alerts about new findings
+      Handler: alert_prowler_findings.handler
+      Role: !GetAtt FindingsAlertRole.Arn
+      CodeUri: ../lambda
+      Timeout: 60
+      Environment:
+        Variables:
+          SLACK_SECRET: !Sub "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:${pSlackSecret}"
+      Layers:
+        - arn:aws:lambda:us-east-1:177933569100:layer:AWS-Parameters-and-Secrets-Lambda-Extension:11
+
+  DynamoDBStreamToFindingsAlertLambda:
+    Type: AWS::Lambda::EventSourceMapping
+    Properties:
+      StartingPosition: LATEST
+      EventSourceArn: !GetAtt ProwlerFindingsTrackingTable.StreamArn
+      FunctionName: !GetAtt FindingsAlertFunction.Arn
+
   #
   # Decorator S3 -> SNS -> SQS -> Lambda Plumbing
   #
@@ -744,6 +810,28 @@ Resources:
       Statistic: Average
       Threshold: 3
       TreatMissingData: missing
+      AlarmActions:
+        - !If
+          - cAlarmActions
+          - !Ref pAlertTopicArn
+          - !Ref AWS::NoValue
+  
+  FindingsAlertFunctionErrorAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub ${FindingsAlertFunction}-LambdaErrors
+      AlarmDescription: "Alarm if lambda errors out"
+      Namespace: "AWS/Lambda"
+      MetricName: "Errors"
+      Dimensions:
+      - Name: "FunctionName"
+        Value: !Ref FindingsAlertFunction
+      Statistic: "Sum"
+      ComparisonOperator: "GreaterThanThreshold"
+      Threshold: 0
+      EvaluationPeriods: 1
+      Period: 60
+      TreatMissingData: "ignore"
       AlarmActions:
         - !If
           - cAlarmActions
