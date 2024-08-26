@@ -117,7 +117,7 @@ def process_account_findings(findings_to_process: List[Dict]) -> List[Dict]:
                 logger.info("finding event time is before dynamodb start time, updating table")
             f["start_time"] = f["event_time"]
             ddb_finding = copy.deepcopy(f)
-            ddb_finding.pop("unmapped")
+            ddb_finding.pop("unmapped", None)
             processed_findings.append(f)
             # Don't want to add these to the output file (unnecessary), but do want them to be added to DDB
             ddb_finding["finding_info_uid"] = ddb_finding["finding_info"]["uid"]
