@@ -163,3 +163,6 @@ def remove_duplicate_findings(findings: List[Dict]) -> List[Dict]:
             uid_dict[uid] = finding
         else:
             logger.info(f"finding {uid} is a duplicate and has a newer start time, not adding to new_findings")
+
+    # Convert the dictionary back to a list
+    return list(uid_dict.values())
