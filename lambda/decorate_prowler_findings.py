@@ -16,7 +16,7 @@ import copy
 import json
 import logging
 import os
-from typing import Dict, List
+from typing import Dict, List, Tuple
 
 from boto3.dynamodb.conditions import Key
 
@@ -33,6 +33,7 @@ logging.getLogger('urllib3').setLevel(logging.WARNING)
 TABLE_NAME = os.environ["TRACKING_TABLE_NAME"]
 OUTPUT_BUCKET = os.environ["OUTPUT_BUCKET"]
 OUTPUT_PREFIX = "prowler4-output/json-ocsf-processed/"
+TABLE_HANDLER = DynamoDBTable(TABLE_NAME)
 
 logger.info("decorate_prowler_findings initiated")
 
@@ -69,12 +70,15 @@ def handler(event, context):
                 continue
 
             logger.info(f"{len(findings_to_process)} findings to process in s3://{bucket}/{obj_key}")
-            processed_findings = process_account_findings(findings_to_process)
+            processed_findings, new_findings = process_account_findings(findings_to_process)
+            logger.debug(f"adding {len(new_findings)} findings to dynamodb")
+            TABLE_HANDLER.batch_write_items(new_findings)
+
             logger.info(f"writing findings to s3://{OUTPUT_BUCKET}/{output_key}")
             put_dict_object(OUTPUT_BUCKET, output_key, processed_findings)
 
 
-def process_account_findings(findings_to_process: List[Dict]) -> List[Dict]:
+def process_account_findings(findings_to_process: List[Dict]) -> Tuple[List[Dict], List[Dict]]:
     """
     Given a list of Prowler findings for an AWS account:
         - Looks up all findings for the AWS account in DynamoDB
@@ -86,26 +90,24 @@ def process_account_findings(findings_to_process: List[Dict]) -> List[Dict]:
         findings_to_process (List[Dict]): List of prowler dictionary findings
 
     Returns:
-        processed_findings (List[Dict]): List of prowler dictionary findings with additional fields from DDB
+        processed_findings, new_findings (Tuple[List[Dict], List[Dict]]): List of prowler dictionary findings with additional fields from DDB, 
+all new findings to be written to DDB
     """
-    table_handler = DynamoDBTable(TABLE_NAME)
-
     logger.info(f"processing {len(findings_to_process)} findings")
     # Query for all findings just from the account number
     account_id = findings_to_process[0]["cloud"]["account"]["uid"]
-    account_findings: Dict = table_handler.table.query(
+    account_findings: Dict = TABLE_HANDLER.table.query(
         IndexName="CloudAccountIndex",
         KeyConditionExpression=Key("cloud_account_uid").eq(account_id),
         ProjectionExpression="finding_info_uid, cloud_account_uid, metadata_event_code, start_time"
     )
-    finding_uids = {}
+    existing_finding_uids = {}
     for item in account_findings.get("Items", {}):
-        finding_uids[item.get("finding_info_uid")] = {"start_time": item.get("start_time")}
+        existing_finding_uids[item.get("finding_info_uid")] = {"start_time": item.get("start_time")}
 
-    findings_to_add = []
-    processed_findings = []
+    new_findings = [] # findings to be added to dynamodb
+    processed_findings = [] # full list of processed findings
     for f in findings_to_process:
-
         finding_uid = f["finding_info"]["uid"]
         # If the finding is PASS/MANUAL, just write to output file as-is
         if f["status_code"] != "FAIL":
@@ -113,9 +115,9 @@ def process_account_findings(findings_to_process: List[Dict]) -> List[Dict]:
             processed_findings.append(f)
             continue
 
-        existing_finding = finding_uids.get(finding_uid, {})
+        existing_finding = existing_finding_uids.get(finding_uid, {})
         if not existing_finding or f["event_time"] < existing_finding.get("start_time"):
-            if finding_uid not in finding_uids:
+            if finding_uid not in existing_finding_uids:
                 logger.info(f"finding uid {finding_uid} not found in dynamodb, adding to table")
             # Handle possible scenario where incoming finding was processed out of order and the start time is earlier even though the finding has already been written to table
             elif f["event_time"] < existing_finding.get("start_time"):
@@ -125,19 +127,39 @@ def process_account_findings(findings_to_process: List[Dict]) -> List[Dict]:
             ddb_finding.pop("unmapped", None)
             processed_findings.append(f)
             # Don't want to add these to the output file (unnecessary), but do want them to be added to DDB
-            ddb_finding["finding_info_uid"] = ddb_finding["finding_info"]["uid"]
-            ddb_finding["metadata_event_code"] = ddb_finding["metadata"]["event_code"]
-            ddb_finding["cloud_account_uid"] = ddb_finding["cloud"]["account"]["uid"]
-            findings_to_add.append(ddb_finding)
+            ddb_finding["finding_info_uid"] = ddb_finding.get("finding_info", {}).get("uid")
+            ddb_finding["metadata_event_code"] = ddb_finding.get("metadata", {}).get("event_code")
+            ddb_finding["cloud_account_uid"] = ddb_finding.get("cloud", {}).get("account", {}).get("uid")
+            new_findings.append(ddb_finding)
         # If finding already in table and the finding event time is after the existing record's start time, just write new start time to S3 output file
         else:
             logger.debug(f"finding uid {finding_uid} found in dynamodb and has a start time of {existing_finding.get('start_time')}, adding to output file")
             f["start_time"] = existing_finding.get("start_time")
             processed_findings.append(f)
 
-    logger.debug(f"adding {len(findings_to_add)} findings to dynamodb")
-    table_handler.batch_write_items(findings_to_add)
+    new_findings = remove_duplicate_findings(new_findings)
 
     logger.info(f"processed {len(processed_findings)} findings")
 
-    return processed_findings
+    return processed_findings, new_findings
+
+def remove_duplicate_findings(findings: List[Dict]) -> List[Dict]:
+    """
+    Stopgap measure to handle when Prowler provides a duplicate finding IDs.
+    Iterates through the findings, and if a duplicate finding is found - only keep one with older start time.
+    """
+    uid_dict = {}
+    for finding in findings:
+        uid = finding["finding_info_uid"]
+        start_time = finding["start_time"]
+
+        # If UID is not in the dictionary or the current start_time is earlier, update the dictionary
+        if uid not in uid_dict or start_time < uid_dict[uid]["start_time"]:
+            if uid not in uid_dict:
+                logger.debug(f"finding {uid} is unique, adding to new_findings")
+            else:
+                logger.info(f"finding {uid} is a duplicate and has an earlier start time, replacing previous value")
+
+            uid_dict[uid] = finding
+        else:
+            logger.info(f"finding {uid} is a duplicate and has a newer start time, not adding to new_findings")
