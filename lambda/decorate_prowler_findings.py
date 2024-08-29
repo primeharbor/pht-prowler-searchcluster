@@ -64,11 +64,15 @@ def handler(event, context):
             if not findings_to_process:
                 raise Exception(f"Failed to get s3://{bucket}/{obj_key}") # This will force a requeue?
 
+            if 'event_code' not in findings_to_process[0]["metadata"]:
+                logger.warning(f"event_code not present in finding metadata. Is s3://{bucket}/{obj_key} from before prowler v4.2.0?")
+                continue
+
             logger.info(f"{len(findings_to_process)} findings to process in s3://{bucket}/{obj_key}")
             processed_findings = process_account_findings(findings_to_process)
             logger.info(f"writing findings to s3://{OUTPUT_BUCKET}/{output_key}")
             put_dict_object(OUTPUT_BUCKET, output_key, processed_findings)
-            
+
 
 def process_account_findings(findings_to_process: List[Dict]) -> List[Dict]:
     """
@@ -101,13 +105,14 @@ def process_account_findings(findings_to_process: List[Dict]) -> List[Dict]:
     findings_to_add = []
     processed_findings = []
     for f in findings_to_process:
+
         finding_uid = f["finding_info"]["uid"]
         # If the finding is PASS/MANUAL, just write to output file as-is
         if f["status_code"] != "FAIL":
             logger.debug(f"finding uid {finding_uid} status is {f['status_code']}, skipping")
             processed_findings.append(f)
             continue
-        
+
         existing_finding = finding_uids.get(finding_uid, {})
         if not existing_finding or f["event_time"] < existing_finding.get("start_time"):
             if finding_uid not in finding_uids:
