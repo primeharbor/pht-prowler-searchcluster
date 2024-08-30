@@ -15,6 +15,7 @@
 import json
 import logging
 import os
+import requests
 from time import sleep
 from typing import Dict, List, Optional
 
@@ -92,6 +93,22 @@ def get_org_account_details():
             return(get_org_account_details())
         else:
             raise
+
+def get_cache_secret(secret_arn):
+    headers = {"X-Aws-Parameters-Secrets-Token": os.environ.get("AWS_SESSION_TOKEN")}
+
+    secrets_extension_endpoint = (
+        "http://localhost:"
+        + "2773"
+        + "/secretsmanager/get?secretId="
+        + secret_arn
+    )
+
+    r = requests.get(secrets_extension_endpoint, headers=headers)
+    secret = json.loads(r.text)["SecretString"]
+    secret = json.loads(secret)
+
+    return secret
 
 class DynamoDBTable:
     """
