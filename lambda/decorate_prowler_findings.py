@@ -127,9 +127,9 @@ all new findings to be written to DDB
             ddb_finding.pop("unmapped", None)
             processed_findings.append(f)
             # Don't want to add these to the output file (unnecessary), but do want them to be added to DDB
-            ddb_finding["finding_info_uid"] = ddb_finding.get("finding_info", {}).get("uid")
-            ddb_finding["metadata_event_code"] = ddb_finding.get("metadata", {}).get("event_code")
-            ddb_finding["cloud_account_uid"] = ddb_finding.get("cloud", {}).get("account", {}).get("uid")
+            ddb_finding["finding_info_uid"] = ddb_finding["finding_info"]["uid"]
+            ddb_finding["metadata_event_code"] = ddb_finding["metadata"]["event_code"]
+            ddb_finding["cloud_account_uid"] = ddb_finding["cloud"]["account"]["uid"]
             new_findings.append(ddb_finding)
         # If finding already in table and the finding event time is after the existing record's start time, just write new start time to S3 output file
         else:
