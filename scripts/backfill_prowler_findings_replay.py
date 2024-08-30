@@ -61,6 +61,7 @@ def main():
     parser.add_argument("--prefix", help="Prefix where json files live in bucket", default="prowler4-output/json-ocsf/")
     parser.add_argument("--profile", help="AWS profile to use. Default will default to 'default'")
     parser.add_argument("--region", help="AWS region to use. Defaults to us-east-1", default="us-east-1")
+    parser.add_argument("--account-id", help="Only process this account")
 
     args = parser.parse_args()
 
@@ -68,7 +69,7 @@ def main():
     sts = session.client("sts")
     account_id = sts.get_caller_identity().get("Account")
     topic_arn = f"arn:aws:sns:{args.region}:{account_id}:{args.topic}"
-    logger.info(f"replaying to topic {topic_arn}")  
+    logger.info(f"replaying to topic {topic_arn}")
 
     file_name_account_id_regex = r'\b\d{12}\b'
     objects = list_objects(session, args.bucket, args.prefix)
@@ -79,10 +80,11 @@ def main():
         account_files.setdefault(account_number, []).append(object)
 
     for account, account_object_names in account_files.items():
+        if args.account_id is not None and account != args.account_id:
+            continue
         logger.info(f"backfilling findings for account {account} from {len(account_object_names)} objects")
         for object_name in account_object_names:
             replay_object(session, topic_arn, args.bucket, object_name)
-        
 
 if __name__ == "__main__":
     main()
