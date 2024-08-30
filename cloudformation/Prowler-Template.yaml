@@ -722,6 +722,15 @@ Resources:
               - secretsmanager:GetSecretValue
               - kms:Decrypt
             Resource: !Sub "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:${pSlackSecret}*"
+      - PolicyName: S3ConfigFileAccess
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Action:
+            - s3:GetObject
+            Effect: Allow
+            Resource:
+              - !Sub 'arn:aws:s3:::${pBucketName}/*.yaml'
 
   FindingsAlertFunction:
     Type: AWS::Serverless::Function
@@ -735,6 +744,7 @@ Resources:
       Environment:
         Variables:
           SLACK_SECRET: !Sub "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:${pSlackSecret}"
+          CONFIG_BUCKET: !Ref ProwlerBucket
       Layers:
         - arn:aws:lambda:us-east-1:177933569100:layer:AWS-Parameters-and-Secrets-Lambda-Extension:11
 

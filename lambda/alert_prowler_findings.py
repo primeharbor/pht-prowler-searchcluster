@@ -18,19 +18,25 @@ import logging
 import os
 from typing import Dict, List
 
-import requests
+import boto3
+from dynamodb_json import json_util as ddb_json
 
-from common import get_cache_secret
+from common import get_cache_secret, get_object, send_slack_message
 
 
 logger = logging.getLogger()
-logger.setLevel(getattr(logging, os.getenv('LOG_LEVEL', default='INFO')))
-logging.getLogger('botocore').setLevel(logging.WARNING)
-logging.getLogger('boto3').setLevel(logging.WARNING)
-logging.getLogger('urllib3').setLevel(logging.WARNING)
+logger.setLevel(getattr(logging, os.getenv("LOG_LEVEL", default="INFO")))
+logging.getLogger("botocore").setLevel(logging.WARNING)
+logging.getLogger("boto3").setLevel(logging.WARNING)
+logging.getLogger("urllib3").setLevel(logging.WARNING)
 
 # Using environ to raise KeyError if not provided
 SLACK_SECRET_ARN = os.environ["SLACK_SECRET"]
+CONFIG_BUCKET = os.environ["CONFIG_BUCKET"]
+CONFIG_PREFIX = os.getenv("CONFIG_PREFIX", "process_findings_config.yaml")
+
+s3 = boto3.client("s3")
+config_data = get_object(CONFIG_BUCKET, CONFIG_PREFIX, type="yaml")
 
 logger.info("alert_prowler_findings initiated")
 
@@ -44,18 +50,81 @@ def handler(event, context):
 
     for record in event["Records"]:
         ddb_entry = record["dynamodb"]
-        # send_slack_message(slack_api_token, slack_channel_id, ddb_entry)
+        ddb_entry = ddb_json.loads(ddb_entry)
+        metadata_event_code = ddb_entry.get("NewImage", {}).get("metadata_event_code")
+        if metadata_event_code in config_data.get("alert_event_codes", []):
+            send_slack_message(slack_api_token, slack_channel_id, blocks=generate_finding_alert(ddb_entry))
         
-def send_slack_message(token: str, channel_id: str, text: str):
-    url = 'https://slack.com/api/chat.postMessage'
-    headers = {'Authorization': f'Bearer {token}'}
-    payload = {
-        'channel': channel_id,
-        'text': text
-    }
+def generate_finding_alert(finding: Dict) -> List[Dict]:
+    new_finding_data = finding.get("NewImage", {})
+    finding_uid = new_finding_data["finding_info_uid"]
+    aws_account = new_finding_data["cloud_account_uid"]
+    aws_account_name = new_finding_data.get("cloud", {}).get("account", {}).get("name")
+    metadata_event_code = new_finding_data["metadata_event_code"]
+    status_detail = new_finding_data["status_detail"]
+    severity = new_finding_data["severity_id"]
+    resource_fields = []
+    for resource in new_finding_data.get("resources", []):
+        resource_fields.append(
+            {
+                "type": "mrkdwn",
+                "text": f"*Resource Name:* `{resource.get('name')}`"
+            }
+        )
+        resource_fields.append(
+            {
+                "type": "mrkdwn",
+                "text": f"*Resource ARN:* `{resource.get('uid')}`"
+            }
+        )
 
-    response = requests.post(url, headers=headers, json=payload)
+    blocks = [
+        {
+            "type": "section",
+            "text": {
+                "type": "mrkdwn",
+                "text": f"*High severity prowler finding `{metadata_event_code}` discovered in account `{aws_account}`*"
+            }
+        },
+        {
+            "type": "section",
+            "fields": [
+                {
+                    "type": "mrkdwn",
+                    "text": f"*Severity:* `{severity}`"
+                },
+            ]
+        },
+        {
+            "type": "section",
+            "fields": [
+                {
+                    "type": "mrkdwn",
+                    "text": f"*Finding UID:* `{finding_uid}`"
+                },
+                {
+                    "type": "mrkdwn",
+                    "text": f"*Status Detail:* {status_detail}"
+                },
+            ]
+        },
+        {
+            "type": "section",
+            "fields": [
+                {
+                    "type": "mrkdwn",
+                    "text": f"*Account Name:* `{aws_account_name}`"
+                },
+                {
+                    "type": "mrkdwn",
+                    "text": f"*Account ID:* `{aws_account}`"
+                },
+            ]
+        },
+        {
+            "type": "section",
+            "fields": resource_fields
+        }
+    ]
 
-    response.raise_for_status()
-
-    logger.info("successfully sent alert to slack")
+    return blocks

@@ -38,6 +38,15 @@ lambda/urllib3
 lambda/dateutil
 lambda/opensearchpy
 lambda/events
+lambda/yaml
+lambda/_yaml
+lambda/dynamodb_json
+lambda/boto3
+lambda/botocore
+lambda/jmespath
+lambda/s3transfer
+lambda/simplejson
+lambda/tests
 
 gsheet-lambda/apiclient
 gsheet-lambda/bin
