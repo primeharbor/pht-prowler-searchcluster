@@ -682,7 +682,7 @@ Resources:
 
   FindingsAlertRole:
     Type: AWS::IAM::Role
-    Condition: cSlackSecret
+    Condition: cDeployAlertLambda
     Properties:
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
@@ -736,7 +736,7 @@ Resources:
 
   FindingsAlertFunction:
     Type: AWS::Serverless::Function
-    Condition: cSlackSecret
+    Condition: cDeployAlertLambda
     Properties:
       FunctionName: !Sub "${AWS::StackName}-findings-alert"
       Description: Send alerts about new findings
@@ -752,7 +752,7 @@ Resources:
         - arn:aws:lambda:us-east-1:177933569100:layer:AWS-Parameters-and-Secrets-Lambda-Extension:11
 
   DynamoDBStreamToFindingsAlertLambda:
-    Condition: cSlackSecret
+    Condition: cDeployAlertLambda
     Type: AWS::Lambda::EventSourceMapping
     Properties:
       StartingPosition: LATEST
@@ -832,7 +832,7 @@ Resources:
   
   FindingsAlertFunctionErrorAlarm:
     Type: AWS::CloudWatch::Alarm
-    Condition: cSlackSecret
+    Condition: cDeployAlertLambda
     Properties:
       AlarmName: !Sub ${FindingsAlertFunction}-LambdaErrors
       AlarmDescription: "Alarm if lambda errors out"
