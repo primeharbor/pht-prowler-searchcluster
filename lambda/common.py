@@ -130,8 +130,6 @@ def send_slack_message(token: str, channel_id: str, text: Optional[str] = None, 
 
     response.raise_for_status()
 
-    logger.info("successfully sent alert to slack")
-
 class DynamoDBTable:
     """
     General wrapper for DynamoDB operations

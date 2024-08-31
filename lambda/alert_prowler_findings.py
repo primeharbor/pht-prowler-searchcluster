@@ -54,9 +54,11 @@ def handler(event, context):
     for record in event["Records"]:
         ddb_entry = record["dynamodb"]
         ddb_entry = ddb_json.loads(ddb_entry)
+        finding_uid = ddb_entry.get("NewImage", {}).get("finding_info_uid")
         metadata_event_code = ddb_entry.get("NewImage", {}).get("metadata_event_code")
         if metadata_event_code in config_data.get("alert_event_codes", []):
             send_slack_message(slack_api_token, slack_channel_id, blocks=generate_finding_alert(ddb_entry))
+            logger.info(f"succesfully sent alert to slack for finding id {finding_uid}")
         
 def generate_finding_alert(finding: Dict) -> List[Dict]:
     new_finding_data = finding.get("NewImage", {})
@@ -91,16 +93,17 @@ def generate_finding_alert(finding: Dict) -> List[Dict]:
         },
         {
             "type": "section",
-            "fields": [
-                {
-                    "type": "mrkdwn",
-                    "text": f"*Finding Title:* {finding_title}"
-                },
-                {
-                    "type": "mrkdwn",
-                    "text": f"*Status Detail:* {status_detail}"
-                },
-            ]
+            "text": {
+                "type": "mrkdwn",
+                "text": f"*Finding Title:* {finding_title}"
+            }
+        },
+        {
+            "type": "section",
+            "text": {
+                "type": "mrkdwn",
+                "text": f"*Status Detail:* {status_detail}"
+            }
         },
         {
             "type": "section",
