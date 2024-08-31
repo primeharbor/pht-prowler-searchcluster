@@ -45,11 +45,15 @@ Parameters:
   pAlertTopicArn:
     Description: Topic for Any Alerts or Alarms to be sent to
     Type: String
+    Default: None
 
   pLambdaSize:
     Description: Memory/CPU Size of the Ingestion Lambda
     Type: String
     Default: 2048
+
+Conditions:
+  cAlarmActions: !Not [!Equals [ !Ref pAlertTopicArn, "None" ]]
 
 Globals:
   Function:
@@ -159,9 +163,15 @@ Resources:
       Period: 60
       TreatMissingData: "ignore"
       AlarmActions:
-        - !Ref pAlertTopicArn
+        - !If
+          - cAlarmActions
+          - !Ref pAlertTopicArn
+          - !Ref AWS::NoValue
       OKActions:
-        - !Ref pAlertTopicArn
+        - !If
+          - cAlarmActions
+          - !Ref pAlertTopicArn
+          - !Ref AWS::NoValue
 
 
   #
@@ -218,7 +228,10 @@ Resources:
     Properties:
       ActionsEnabled: True
       AlarmActions:
-        - !Ref pAlertTopicArn
+        - !If
+          - cAlarmActions
+          - !Ref pAlertTopicArn
+          - !Ref AWS::NoValue
       AlarmDescription: "Alert when Queue doesn't properly drain"
       AlarmName: !Sub "${AWS::StackName}-Queue"
       ComparisonOperator: GreaterThanOrEqualToThreshold
@@ -229,7 +242,10 @@ Resources:
       MetricName: ApproximateNumberOfMessagesVisible
       Namespace: AWS/SQS
       OKActions:
-        - !Ref pAlertTopicArn
+        - !If
+          - cAlarmActions
+          - !Ref pAlertTopicArn
+          - !Ref AWS::NoValue
       Period: 300
       Statistic: Average
       Threshold: 3
@@ -281,9 +297,15 @@ Resources:
       Period: 60
       TreatMissingData: "ignore"
       AlarmActions:
-        - !Ref pAlertTopicArn
+        - !If
+          - cAlarmActions
+          - !Ref pAlertTopicArn
+          - !Ref AWS::NoValue
       OKActions:
-        - !Ref pAlertTopicArn
+        - !If
+          - cAlarmActions
+          - !Ref pAlertTopicArn
+          - !Ref AWS::NoValue
 
 Outputs:
   TemplateURL:
