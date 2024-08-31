@@ -96,13 +96,9 @@ all new findings to be written to DDB
     logger.info(f"processing {len(findings_to_process)} findings")
     # Query for all findings just from the account number
     account_id = findings_to_process[0]["cloud"]["account"]["uid"]
-    account_findings: Dict = TABLE_HANDLER.table.query(
-        IndexName="CloudAccountIndex",
-        KeyConditionExpression=Key("cloud_account_uid").eq(account_id),
-        ProjectionExpression="finding_info_uid, cloud_account_uid, metadata_event_code, start_time"
-    )
+    account_findings = TABLE_HANDLER.paginate_query(index_name="CloudAccountIndex", key_condition_expression=Key("cloud_account_uid").eq(account_id), projection_expression="finding_info_uid, start_time")
     existing_finding_uids = {}
-    for item in account_findings.get("Items", {}):
+    for item in account_findings:
         existing_finding_uids[item.get("finding_info_uid")] = {"start_time": item.get("start_time")}
 
     new_findings = [] # findings to be added to dynamodb
@@ -139,7 +135,7 @@ all new findings to be written to DDB
 
     new_findings = remove_duplicate_findings(new_findings)
 
-    logger.info(f"processed {len(processed_findings)} findings")
+    logger.info(f"account id {account_id}: processed {len(processed_findings)} findings with {len(new_findings)} new findings")
 
     return processed_findings, new_findings
 
@@ -166,3 +162,4 @@ def remove_duplicate_findings(findings: List[Dict]) -> List[Dict]:
 
     # Convert the dictionary back to a list
     return list(uid_dict.values())
+    
