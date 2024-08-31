@@ -19,6 +19,7 @@ import logging
 import os
 import re
 from typing import List
+from time import sleep
 
 import boto3
 import boto3.session
@@ -62,6 +63,7 @@ def main():
     parser.add_argument("--profile", help="AWS profile to use. Default will default to 'default'")
     parser.add_argument("--region", help="AWS region to use. Defaults to us-east-1", default="us-east-1")
     parser.add_argument("--account-id", help="Only process this account")
+    parser.add_argument("--pause", help="Pause this number of seconds between files", default=1)
 
     args = parser.parse_args()
 
@@ -85,6 +87,7 @@ def main():
         logger.info(f"backfilling findings for account {account} from {len(account_object_names)} objects")
         for object_name in account_object_names:
             replay_object(session, topic_arn, args.bucket, object_name)
+            sleep(args.pause)
 
 if __name__ == "__main__":
     main()
