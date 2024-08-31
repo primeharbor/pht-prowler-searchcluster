@@ -12,16 +12,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from botocore.exceptions import ClientError
-from requests_aws4auth import AWS4Auth
-from time import sleep
-from urllib.parse import unquote
-import boto3
 import json
+import logging
 import os
+from time import sleep
 from typing import Dict, List, Optional
 
-import logging
+import boto3
+from boto3.dynamodb.conditions import Key
+from botocore.exceptions import ClientError
+from urllib.parse import unquote
+
 logger = logging.getLogger()
 logger.setLevel(getattr(logging, os.getenv('LOG_LEVEL', default='INFO')))
 logging.getLogger('botocore').setLevel(logging.WARNING)
@@ -123,3 +124,36 @@ class DynamoDBTable:
                     batch_writer.put_item(Item=item)
         
         logger.info(f"wrote {written_items} items to DynamoDB table {self.table_name}")
+
+    def paginate_query(self, index_name: str, key_condition_expression: "Key", projection_expression: str) -> List[Dict]:
+        """
+        Standard table query that will automatically paginate, if applicable
+
+        Args:
+            index_name (str): index to query
+            key_condition_expression (Key): ddb KeyConditionExpression
+            projection_expression (str): which fields to return
+
+        Returns:
+            combined_response (List[Dict]): list of dictionary items returned from query
+        """
+        combined_response = []
+        response = self.table.query(
+            IndexName=index_name,
+            KeyConditionExpression=key_condition_expression,
+            ProjectionExpression=projection_expression
+        )
+        combined_response.extend(response.get("Items", []))
+    
+        while "LastEvaluatedKey" in response:
+            response = self.table.query(
+                IndexName=index_name,
+                KeyConditionExpression=key_condition_expression,
+                ProjectionExpression=projection_expression,
+                ExclusiveStartKey=response["LastEvaluatedKey"]
+            )
+            combined_response.extend(response.get("Items", []))
+
+        logger.info(f"paginated query returned {len(combined_response)} items")
+
+        return combined_response
