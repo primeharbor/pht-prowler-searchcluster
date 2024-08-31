@@ -41,6 +41,11 @@ SCORECARD_OUTPUT_TEMPLATE_PREFIX=Scorecards-Template-Transformed
 SCORECARD_OUTPUT_TEMPLATE=$(SCORECARD_OUTPUT_TEMPLATE_PREFIX)-$(version).yaml
 SCORECARD_TEMPLATE_URL ?= https://s3.amazonaws.com/$(DEPLOY_BUCKET)/$(DEPLOY_PREFIX)/$(SCORECARD_OUTPUT_TEMPLATE)
 
+OPENSEARCH_TEMPLATE=cloudformation/OpenSearch-Template.yaml
+OPENSEARCH_OUTPUT_TEMPLATE_PREFIX=OpenSearch-Template-Transformed
+OPENSEARCH_OUTPUT_TEMPLATE=$(OPENSEARCH_OUTPUT_TEMPLATE_PREFIX)-$(version).yaml
+OPENSEARCH_TEMPLATE_URL ?= https://s3.amazonaws.com/$(DEPLOY_BUCKET)/$(DEPLOY_PREFIX)/$(OPENSEARCH_OUTPUT_TEMPLATE)
+
 FINDINGS_TEMPLATE=cloudformation/RegionalFindings-Template.yaml
 FINDINGS_OUTPUT_TEMPLATE_PREFIX=RegionalFindings-Template-Transformed
 FINDINGS_OUTPUT_TEMPLATE=$(FINDINGS_OUTPUT_TEMPLATE_PREFIX)-$(version).yaml
@@ -133,6 +138,22 @@ ifndef SCORECARD_MANIFEST
 	$(error SCORECARD_MANIFEST is not set)
 endif
 	cft-deploy -m $(SCORECARD_MANIFEST) --template-url $(SCORECARD_TEMPLATE_URL) pTemplateURL=$(SCORECARD_TEMPLATE_URL) --force
+
+
+#
+# Opensearch Deploy Commands
+#
+opensearch-package: deps
+	@aws cloudformation package --template-file $(OPENSEARCH_TEMPLATE) --s3-bucket $(DEPLOY_BUCKET) --s3-prefix $(DEPLOY_PREFIX)/transform --output-template-file cloudformation/$(OPENSEARCH_OUTPUT_TEMPLATE)  --metadata build_ver=$(version)
+	@aws s3 cp cloudformation/$(OPENSEARCH_OUTPUT_TEMPLATE) s3://$(DEPLOY_BUCKET)/$(DEPLOY_PREFIX)/
+	rm cloudformation/$(OPENSEARCH_OUTPUT_TEMPLATE)
+	@echo "Deploy via $(OPENSEARCH_TEMPLATE_URL)"
+
+opensearch-deploy: opensearch-package
+ifndef SEARCH_MANIFEST
+	$(error SEARCH_MANIFEST is not set)
+endif
+	cft-deploy -m $(SEARCH_MANIFEST) --template-url $(OPENSEARCH_TEMPLATE_URL) pTemplateURL=$(OPENSEARCH_TEMPLATE_URL) --force
 
 #
 # Regional Findings Deploy commands
