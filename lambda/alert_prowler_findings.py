@@ -37,6 +37,9 @@ CONFIG_PREFIX = os.getenv("CONFIG_PREFIX", "process_findings_config.yaml")
 
 s3 = boto3.client("s3")
 config_data = get_object(CONFIG_BUCKET, CONFIG_PREFIX, type="yaml")
+if not config_data:
+    logger.warning("Config data/file not found. No alerts will be sent")
+    config_data = {}
 
 logger.info("alert_prowler_findings initiated")
 
@@ -57,12 +60,12 @@ def handler(event, context):
         
 def generate_finding_alert(finding: Dict) -> List[Dict]:
     new_finding_data = finding.get("NewImage", {})
-    finding_uid = new_finding_data["finding_info_uid"]
+    finding_title = new_finding_data["finding_info"]["title"]
     aws_account = new_finding_data["cloud_account_uid"]
     aws_account_name = new_finding_data.get("cloud", {}).get("account", {}).get("name")
     metadata_event_code = new_finding_data["metadata_event_code"]
     status_detail = new_finding_data["status_detail"]
-    severity = new_finding_data["severity_id"]
+    severity = new_finding_data["severity"]
     resource_fields = []
     for resource in new_finding_data.get("resources", []):
         resource_fields.append(
@@ -83,7 +86,7 @@ def generate_finding_alert(finding: Dict) -> List[Dict]:
             "type": "section",
             "text": {
                 "type": "mrkdwn",
-                "text": f"*High severity prowler finding `{metadata_event_code}` discovered in account `{aws_account}`*"
+                "text": f"*{severity} severity prowler finding `{metadata_event_code}` discovered in account `{aws_account}`*"
             }
         },
         {
@@ -91,16 +94,7 @@ def generate_finding_alert(finding: Dict) -> List[Dict]:
             "fields": [
                 {
                     "type": "mrkdwn",
-                    "text": f"*Severity:* `{severity}`"
-                },
-            ]
-        },
-        {
-            "type": "section",
-            "fields": [
-                {
-                    "type": "mrkdwn",
-                    "text": f"*Finding UID:* `{finding_uid}`"
+                    "text": f"*Finding Title:* {finding_title}"
                 },
                 {
                     "type": "mrkdwn",
