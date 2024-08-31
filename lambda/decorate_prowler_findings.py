@@ -162,12 +162,4 @@ def remove_duplicate_findings(findings: List[Dict]) -> List[Dict]:
 
     # Convert the dictionary back to a list
     return list(uid_dict.values())
-
-if __name__ == "__main__":
-    console_handler = logging.StreamHandler()
-    logger.addHandler(console_handler)
-    with open("prowler-058264364001-2024-05-04.ocsf.json") as f:
-        data = json.load(f)
-
-    processed_findings, new_findings = process_account_findings(data)
     
