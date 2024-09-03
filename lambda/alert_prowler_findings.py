@@ -33,7 +33,7 @@ logging.getLogger("urllib3").setLevel(logging.WARNING)
 # Using environ to raise KeyError if not provided
 SLACK_SECRET_ARN = os.environ["SLACK_SECRET"]
 CONFIG_BUCKET = os.environ["CONFIG_BUCKET"]
-CONFIG_PREFIX = os.getenv("CONFIG_PREFIX", "process_findings_config.yaml")
+CONFIG_PREFIX = os.getenv("CONFIG_PREFIX", "slack_alert.yaml")
 
 s3 = boto3.client("s3")
 config_data = get_object(CONFIG_BUCKET, CONFIG_PREFIX, type="yaml")
