@@ -71,7 +71,7 @@ Parameters:
     Description: Name of LogGroup where Prowler Container will write logs
     Default: prowler
 
-  pSlackSecret:
+  pProwlerSlackSecret:
     Description: FullName of secret that has a SLACK_API_TOKEN and SLACK_CHANNEL_ID to push updates to slack. See https://docs.prowler.cloud/en/latest/tutorials/integrations/
     Type: String
     Default: "NONE"
@@ -134,7 +134,7 @@ Parameters:
     Default: "NONE"
 
 Conditions:
-  cSlackSecret: !Not [!Equals [ !Ref pSlackSecret, "NONE" ]]
+  cProwlerSlackSecret: !Not [!Equals [ !Ref pProwlerSlackSecret, "NONE" ]]
   cDeployIngestLambda: !Not [!Equals [ !Ref pDomainEndpoint, "NONE" ]]
   cDeployAlertLambda: !Not [!Equals [ !Ref pFindingAlertSlackSecret, "NONE" ]]
   cAlarmActions: !Not [!Equals [ !Ref pAlertTopicArn, "NONE" ]]
@@ -330,12 +330,12 @@ Resources:
                 awslogs-stream-prefix: !Sub "${pServiceName}-${pImageVersion}"
           Secrets:
             !If
-            - cSlackSecret
+            - cProwlerSlackSecret
             -
               - Name: SLACK_API_TOKEN
-                ValueFrom: !Sub "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:${pSlackSecret}:SLACK_API_TOKEN::"
+                ValueFrom: !Sub "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:${pProwlerSlackSecret}:SLACK_API_TOKEN::"
               - Name: SLACK_CHANNEL_ID
-                ValueFrom: !Sub "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:${pSlackSecret}:SLACK_CHANNEL_ID::"
+                ValueFrom: !Sub "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:${pProwlerSlackSecret}:SLACK_CHANNEL_ID::"
             - !Ref AWS::NoValue
           Environment:
             - Name: ROLENAME
@@ -438,7 +438,7 @@ Resources:
                 - ssm:GetParameters
                 - secretsmanager:GetSecretValue
                 - kms:Decrypt
-              Resource: !Sub "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:${pSlackSecret}*"
+              Resource: !Sub "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:${pProwlerSlackSecret}*"
 
   ECSEventRole:
     Type: AWS::IAM::Role
