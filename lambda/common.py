@@ -99,21 +99,51 @@ def get_org_account_details():
         else:
             raise
 
-def get_cache_secret(secret_arn):
-    headers = {"X-Aws-Parameters-Secrets-Token": os.environ.get("AWS_SESSION_TOKEN")}
+def get_secret(secret_arn):
+    sm = boto3.client("secretsmanager")
 
-    secrets_extension_endpoint = (
-        "http://localhost:"
-        + "2773"
-        + "/secretsmanager/get?secretId="
-        + secret_arn
-    )
+    try:
+        response = sm.get_secret_value(SecretId=secret_arn)
 
-    r = requests.get(secrets_extension_endpoint, headers=headers)
-    secret = json.loads(r.text)["SecretString"]
-    secret = json.loads(secret)
+        # Check if the secret contains the secret string or binary data
+        if "SecretString" in response:
+            secret = response["SecretString"]
+        else:
+            secret = response["SecretBinary"]
 
-    return secret
+        # Parse secret if it's in JSON format
+        try:
+            secret = json.loads(secret)
+        except json.JSONDecodeError:
+            # If it's not JSON, just return the string
+            pass  
+
+        return secret
+
+    except ClientError as e:
+        if e.response["Error"]["Code"] == "DecryptionFailureException":
+            logger.error(f"Failed to decrypt secret {secret_arn}")
+        elif e.response["Error"]["Code"] == "ResourceNotFoundException":
+            logger.error(f"The requested secret ({secret_arn}) does not exist")
+        else:
+            logger.error(f"Unexpected ClientError: {e}")
+
+        return None
+    
+def get_slack_secret(secret_arn):
+    """Re-usable function specifically for the expected slack secret"""
+    slack_secret = get_secret(secret_arn)
+    # Also want a key error here if this fails
+    slack_api_token = slack_secret["SLACK_API_TOKEN"]
+    slack_channel_id = slack_secret["SLACK_CHANNEL_ID"]
+
+    return slack_api_token, slack_channel_id
+    
+class SlackException(Exception):
+    pass
+
+class SlackAuthException(SlackException):
+    pass
 
 def send_slack_message(token: str, channel_id: str, text: Optional[str] = None, blocks: Optional[List[Dict]] = None):
     url = "https://slack.com/api/chat.postMessage"
@@ -127,8 +157,15 @@ def send_slack_message(token: str, channel_id: str, text: Optional[str] = None, 
         raise ValueError("Either 'text' or 'blocks' are required.")
 
     response = requests.post(url, headers=headers, json=payload)
+    
+    response.raise_for_status
 
-    response.raise_for_status()
+    response_content = json.loads(response.content)
+    if not response_content.get("ok", True):
+        if response_content.get("error") == "invalid_auth":
+            raise SlackAuthException()
+        else:
+            raise SlackException(f"Unhandled exception while sending message - {response_content.get('error')}")
 
 class DynamoDBTable:
     """
