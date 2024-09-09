@@ -15,8 +15,10 @@
 import json
 import logging
 import os
+import requests
 from time import sleep
 from typing import Dict, List, Optional
+import yaml
 
 import boto3
 from boto3.dynamodb.conditions import Key
@@ -29,15 +31,19 @@ logging.getLogger('botocore').setLevel(logging.WARNING)
 logging.getLogger('boto3').setLevel(logging.WARNING)
 logging.getLogger('urllib3').setLevel(logging.WARNING)
 
-def get_object(bucket, obj_key):
-    '''get the object to index from S3 and return the parsed json'''
+def get_object(bucket, obj_key, type: Optional[str] = "json"):
+    '''get the object to index from S3 and return the parsed json or yaml'''
     s3 = boto3.client('s3')
     try:
         response = s3.get_object(
             Bucket=bucket,
             Key=unquote(obj_key)
         )
-        return(json.loads(response['Body'].read()))
+        body = response["Body"].read()
+        if type == "yaml":
+            return yaml.safe_load(body)
+        else:
+            return json.loads(body)
     except ClientError as e:
         if e.response['Error']['Code'] == 'NoSuchKey':
             logger.error("Unable to find resource s3://{}/{}".format(bucket, obj_key))
@@ -92,6 +98,74 @@ def get_org_account_details():
             return(get_org_account_details())
         else:
             raise
+
+def get_secret(secret_arn):
+    sm = boto3.client("secretsmanager")
+
+    try:
+        response = sm.get_secret_value(SecretId=secret_arn)
+
+        # Check if the secret contains the secret string or binary data
+        if "SecretString" in response:
+            secret = response["SecretString"]
+        else:
+            secret = response["SecretBinary"]
+
+        # Parse secret if it's in JSON format
+        try:
+            secret = json.loads(secret)
+        except json.JSONDecodeError:
+            # If it's not JSON, just return the string
+            pass  
+
+        return secret
+
+    except ClientError as e:
+        if e.response["Error"]["Code"] == "DecryptionFailureException":
+            logger.error(f"Failed to decrypt secret {secret_arn}")
+        elif e.response["Error"]["Code"] == "ResourceNotFoundException":
+            logger.error(f"The requested secret ({secret_arn}) does not exist")
+        else:
+            logger.error(f"Unexpected ClientError: {e}")
+
+        return None
+    
+def get_slack_secret(secret_arn):
+    """Re-usable function specifically for the expected slack secret"""
+    slack_secret = get_secret(secret_arn)
+    # Also want a key error here if this fails
+    slack_api_token = slack_secret["SLACK_API_TOKEN"]
+    slack_channel_id = slack_secret["SLACK_CHANNEL_ID"]
+
+    return slack_api_token, slack_channel_id
+    
+class SlackException(Exception):
+    pass
+
+class SlackAuthException(SlackException):
+    pass
+
+def send_slack_message(token: str, channel_id: str, text: Optional[str] = None, blocks: Optional[List[Dict]] = None):
+    url = "https://slack.com/api/chat.postMessage"
+    headers = {"Authorization": f"Bearer {token}"}
+    payload = {"channel": channel_id}
+    if text:
+        payload["text"] = text
+    elif blocks:
+        payload["blocks"] = blocks
+    else:
+        raise ValueError("Either 'text' or 'blocks' are required.")
+
+    response = requests.post(url, headers=headers, json=payload)
+    
+    response.raise_for_status
+
+    response_content = json.loads(response.content)
+    if not response_content.get("ok", True):
+        if response_content.get("error") == "invalid_auth":
+            raise SlackAuthException()
+        else:
+            raise SlackException(f"Unhandled exception while sending message - {response_content.get('error')}")
 
 class DynamoDBTable:
     """

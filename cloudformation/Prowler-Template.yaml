@@ -71,8 +71,13 @@ Parameters:
     Description: Name of LogGroup where Prowler Container will write logs
     Default: prowler
 
-  pSlackSecret:
+  pProwlerSlackSecret:
     Description: FullName of secret that has a SLACK_API_TOKEN and SLACK_CHANNEL_ID to push updates to slack. See https://docs.prowler.cloud/en/latest/tutorials/integrations/
+    Type: String
+    Default: "NONE"
+
+  pFindingAlertSlackSecret:
+    Description: FullName of secret that has a SLACK_API_TOKEN and SLACK_CHANNEL_ID to send high-value new alerts to Slack
     Type: String
     Default: "NONE"
 
@@ -116,7 +121,9 @@ Parameters:
     Description: VPC to use for the Fargate containers
 
 Conditions:
-  cSlackSecret: !Not [!Equals [ !Ref pSlackSecret, "NONE" ]]
+  cProwlerSlackSecret: !Not [!Equals [ !Ref pProwlerSlackSecret, "NONE" ]]
+  cDeployIngestLambda: !Not [!Equals [ !Ref pDomainEndpoint, "NONE" ]]
+  cDeployAlertLambda: !Not [!Equals [ !Ref pFindingAlertSlackSecret, "NONE" ]]
   cAlarmActions: !Not [!Equals [ !Ref pAlertTopicArn, "NONE" ]]
 
 Globals:
@@ -310,12 +317,12 @@ Resources:
                 awslogs-stream-prefix: !Sub "${pServiceName}-${pImageVersion}"
           Secrets:
             !If
-            - cSlackSecret
+            - cProwlerSlackSecret
             -
               - Name: SLACK_API_TOKEN
-                ValueFrom: !Sub "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:${pSlackSecret}:SLACK_API_TOKEN::"
+                ValueFrom: !Sub "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:${pProwlerSlackSecret}:SLACK_API_TOKEN::"
               - Name: SLACK_CHANNEL_ID
-                ValueFrom: !Sub "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:${pSlackSecret}:SLACK_CHANNEL_ID::"
+                ValueFrom: !Sub "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:${pProwlerSlackSecret}:SLACK_CHANNEL_ID::"
             - !Ref AWS::NoValue
           Environment:
             - Name: ROLENAME
@@ -418,7 +425,7 @@ Resources:
                 - ssm:GetParameters
                 - secretsmanager:GetSecretValue
                 - kms:Decrypt
-              Resource: !Sub "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:${pSlackSecret}*"
+              Resource: !Sub "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:${pProwlerSlackSecret}*"
 
   ECSEventRole:
     Type: AWS::IAM::Role
@@ -553,6 +560,83 @@ Resources:
           TRACKING_TABLE_NAME: !Ref ProwlerFindingsTrackingTable
           OUTPUT_BUCKET: !Ref ProwlerBucket
 
+  FindingsAlertRole:
+    Type: AWS::IAM::Role
+    Condition: cDeployAlertLambda
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service:
+            - lambda.amazonaws.com
+          Action:
+          - sts:AssumeRole
+      Path: /
+      Policies:
+      - PolicyName: LambdaLogging
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Resource: '*'
+            Action:
+            - logs:*
+            Effect: Allow
+      - PolicyName: DDBStreamRead
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:DescribeStream
+                - dynamodb:GetRecords
+                - dynamodb:GetShardIterator
+                - dynamodb:ListStreams
+              Resource:
+                - !GetAtt ProwlerFindingsTrackingTable.StreamArn
+      - PolicyName: AccessSlackSecret
+        PolicyDocument:
+          Statement:
+          - Effect: Allow
+            Action:
+              - ssm:GetParameters
+              - secretsmanager:GetSecretValue
+              - kms:Decrypt
+            Resource: !Sub "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:${pFindingAlertSlackSecret}*"
+      - PolicyName: S3ConfigFileAccess
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Action:
+            - s3:GetObject
+            Effect: Allow
+            Resource:
+              - !Sub 'arn:aws:s3:::${pBucketName}/*.yaml'
+
+  FindingsAlertFunction:
+    Type: AWS::Serverless::Function
+    Condition: cDeployAlertLambda
+    Properties:
+      FunctionName: !Sub "${AWS::StackName}-findings-alert"
+      Description: Send alerts about new findings
+      Handler: alert_prowler_findings.handler
+      Role: !GetAtt FindingsAlertRole.Arn
+      CodeUri: ../lambda
+      Timeout: 60
+      Environment:
+        Variables:
+          SLACK_SECRET: !Sub "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:${pFindingAlertSlackSecret}"
+          CONFIG_BUCKET: !Ref ProwlerBucket
+
+  DynamoDBStreamToFindingsAlertLambda:
+    Condition: cDeployAlertLambda
+    Type: AWS::Lambda::EventSourceMapping
+    Properties:
+      StartingPosition: LATEST
+      EventSourceArn: !GetAtt ProwlerFindingsTrackingTable.StreamArn
+      FunctionName: !GetAtt FindingsAlertFunction.Arn
+
   #
   # Decorator S3 -> SNS -> SQS -> Lambda Plumbing
   #
@@ -618,6 +702,29 @@ Resources:
       Statistic: Average
       Threshold: 3
       TreatMissingData: missing
+      AlarmActions:
+        - !If
+          - cAlarmActions
+          - !Ref pAlertTopicArn
+          - !Ref AWS::NoValue
+
+  FindingsAlertFunctionErrorAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Condition: cDeployAlertLambda
+    Properties:
+      AlarmName: !Sub ${FindingsAlertFunction}-LambdaErrors
+      AlarmDescription: "Alarm if lambda errors out"
+      Namespace: "AWS/Lambda"
+      MetricName: "Errors"
+      Dimensions:
+      - Name: "FunctionName"
+        Value: !Ref FindingsAlertFunction
+      Statistic: "Sum"
+      ComparisonOperator: "GreaterThanThreshold"
+      Threshold: 0
+      EvaluationPeriods: 1
+      Period: 60
+      TreatMissingData: "ignore"
       AlarmActions:
         - !If
           - cAlarmActions
