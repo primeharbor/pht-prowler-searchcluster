@@ -120,19 +120,6 @@ Parameters:
     Type: AWS::EC2::VPC::Id
     Description: VPC to use for the Fargate containers
 
-  #
-  # ES
-  #
-  pDomainArn:
-    Description: OpenSearch Domain ARN (for lambda perms)
-    Type: String
-    Default: arn:aws:sts::123456789012:NONE
-
-  pDomainEndpoint:
-    Description: Hostname of the Domain Endpoint
-    Type: String
-    Default: "NONE"
-
 Conditions:
   cProwlerSlackSecret: !Not [!Equals [ !Ref pProwlerSlackSecret, "NONE" ]]
   cDeployIngestLambda: !Not [!Equals [ !Ref pDomainEndpoint, "NONE" ]]
@@ -266,7 +253,7 @@ Resources:
               aws:SourceArn: !Sub "arn:aws:s3:*:*:${pBucketName}"
             StringEquals:
               aws:SourceAccount: !Ref AWS::AccountId
-              
+
   GCPOutputNotificationTopic:
     Type: AWS::SNS::Topic
     Properties:
@@ -491,121 +478,9 @@ Resources:
             EnableECSManagedTags: false
             EnableExecuteCommand: false
 
-
   #
   # Lambda Functions
   #
-  LambdaRole:
-    Type: AWS::IAM::Role
-    Condition: cDeployIngestLambda
-    Properties:
-      AssumeRolePolicyDocument:
-        Version: '2012-10-17'
-        Statement:
-        - Effect: Allow
-          Principal:
-            Service:
-            - lambda.amazonaws.com
-          Action:
-          - sts:AssumeRole
-      Path: /
-      ManagedPolicyArns:
-        - arn:aws:iam::aws:policy/AWSOrganizationsReadOnlyAccess
-      Policies:
-      - PolicyName: S3Access
-        PolicyDocument:
-          Version: '2012-10-17'
-          Statement:
-          - Action:
-            - s3:*
-            Effect: Allow
-            Resource:
-              - !Sub 'arn:aws:s3:::${pBucketName}/*'
-              - !Sub 'arn:aws:s3:::${pBucketName}'
-          - Action:
-            - s3:ListAllMyBuckets
-            - s3:GetBucketLocation
-            Effect: Allow
-            Resource: '*'
-      - PolicyName: LambdaLogging
-        PolicyDocument:
-          Version: '2012-10-17'
-          Statement:
-          - Resource: '*'
-            Action:
-            - logs:*
-            Effect: Allow
-      - PolicyName: AssumeCrossAccountRole
-        PolicyDocument:
-          Version: '2012-10-17'
-          Statement:
-          - Effect: "Allow"
-            Action:
-            - sts:AssumeRole
-            Resource: !Sub "arn:aws:iam::*:role/${pAuditRoleName}"
-      - PolicyName: GetMessages
-        PolicyDocument:
-          Version: '2012-10-17'
-          Statement:
-          - Resource:
-            - !GetAtt S3EventQueue.Arn
-            - !GetAtt FindingIngestEventQueue.Arn
-            Action:
-            - sqs:*
-            Effect: Allow
-      - PolicyName: IndexData
-        PolicyDocument:
-          Version: '2012-10-17'
-          Statement:
-          - Resource: !Sub "${pDomainArn}/*"
-            Action:
-            - es:*
-            Effect: Allow
-
-  ImportProwlerFindingsFunction:
-    Type: AWS::Serverless::Function
-    Condition: cDeployIngestLambda
-    Properties:
-      FunctionName: !Sub "${AWS::StackName}-import-findings"
-      Description: Import Prowler Findings into ElasticSearch
-      Handler: import_prowler_findings.handler
-      Role: !GetAtt LambdaRole.Arn
-      CodeUri: ../lambda
-      Timeout: 60
-      # TODO - Set Concurrency here
-      Events:
-        SQSIngest:
-          Type: SQS
-          Properties:
-            BatchSize: 100
-            MaximumBatchingWindowInSeconds: 60
-            Enabled: True
-            Queue: !GetAtt FindingIngestEventQueue.Arn
-      Environment:
-        Variables:
-          ES_DOMAIN_ENDPOINT: !Ref pDomainEndpoint
-
-  ProcessFindingsFileFunction:
-    Type: AWS::Serverless::Function
-    Condition: cDeployIngestLambda
-    Properties:
-      FunctionName: !Sub "${AWS::StackName}-process-finding-file"
-      Description: Process the Prowler file pushed to S3
-      Handler: process_prowler_file.handler
-      Role: !GetAtt LambdaRole.Arn
-      CodeUri: ../lambda
-      Timeout: 600
-      Events:
-        SQSIngest:
-          Type: SQS
-          Properties:
-            BatchSize: 1
-            Enabled: True
-            Queue: !GetAtt S3EventQueue.Arn
-      Environment:
-        Variables:
-          FINDING_QUEUE_URL: !Ref FindingIngestEventQueue
-
   DecoratorLambdaRole:
     Type: AWS::IAM::Role
     Properties:
@@ -772,7 +647,7 @@ Resources:
       MessageRetentionPeriod: 36000
       ReceiveMessageWaitTimeSeconds: 10
       VisibilityTimeout: 1050
-      
+
   S3EventDecoratorQueueSubscription:
     Type: AWS::SNS::Subscription
     Properties:
@@ -832,7 +707,7 @@ Resources:
           - cAlarmActions
           - !Ref pAlertTopicArn
           - !Ref AWS::NoValue
-  
+
   FindingsAlertFunctionErrorAlarm:
     Type: AWS::CloudWatch::Alarm
     Condition: cDeployAlertLambda
@@ -850,126 +725,6 @@ Resources:
       EvaluationPeriods: 1
       Period: 60
       TreatMissingData: "ignore"
-      AlarmActions:
-        - !If
-          - cAlarmActions
-          - !Ref pAlertTopicArn
-          - !Ref AWS::NoValue
-
-  #
-  # S3 -> SNS -> SQS -> Lambda Plumbing
-  #
-  S3EventQueue:
-    Type: AWS::SQS::Queue
-    Condition: cDeployIngestLambda
-    Properties:
-      # Any messages older than an hour are probably out-of-date
-      MessageRetentionPeriod: 36000
-      ReceiveMessageWaitTimeSeconds: 10
-      VisibilityTimeout: 750
-
-  S3EventQueuePolicy:
-    Type: AWS::SQS::QueuePolicy
-    Condition: cDeployIngestLambda
-    Properties:
-      Queues:
-        - !Ref S3EventQueue
-      PolicyDocument:
-        Version: '2012-10-17'
-        Id: AllowS3
-        Statement:
-        - Sid: AllowS3EventNotification
-          Effect: Allow
-          Principal:
-            AWS: '*'
-          Action:
-          - SQS:SendMessage
-          Resource: !GetAtt S3EventQueue.Arn
-          Condition:
-            ArnLike:
-              aws:SourceArn: !Sub "arn:aws:s3:*:*:${pBucketName}"
-        - Sid: Allow-SNS-SendMessage
-          Effect: Allow
-          Principal: "*"
-          Action:
-          - sqs:SendMessage
-          Resource: !GetAtt S3EventQueue.Arn
-          Condition:
-            ArnEquals:
-              aws:SourceArn:
-                - !Ref OutputNotificationTopic
-                - !Ref GCPOutputNotificationTopic
-
-  S3EventQueueSubscription:
-    Type: AWS::SNS::Subscription
-    Condition: cDeployIngestLambda
-    Properties:
-      Endpoint: !GetAtt S3EventQueue.Arn
-      Protocol: sqs
-      TopicArn: !Ref OutputNotificationTopic
-
-  S3EventQueueGCPSubscription:
-    Type: AWS::SNS::Subscription
-    Condition: cDeployIngestLambda
-    Properties:
-      Endpoint: !GetAtt S3EventQueue.Arn
-      Protocol: sqs
-      TopicArn: !Ref GCPOutputNotificationTopic
-
-  S3EventQueueAlarm:
-    Type: AWS::CloudWatch::Alarm
-    Condition: cDeployIngestLambda
-    Properties:
-      ActionsEnabled: True
-      AlarmDescription: "Alert when Queue doesn't properly drain"
-      AlarmName: !Sub "${AWS::StackName}-FileProcessQueue"
-      ComparisonOperator: GreaterThanOrEqualToThreshold
-      Dimensions:
-        - Name: QueueName
-          Value: !GetAtt S3EventQueue.QueueName
-      EvaluationPeriods: 1
-      MetricName: ApproximateNumberOfMessagesVisible
-      Namespace: AWS/SQS
-      Period: 300
-      Statistic: Average
-      Threshold: 3
-      TreatMissingData: missing
-      AlarmActions:
-        - !If
-          - cAlarmActions
-          - !Ref pAlertTopicArn
-          - !Ref AWS::NoValue
-
-  #
-  # Finding Queue
-  #
-  FindingIngestEventQueue:
-    Type: AWS::SQS::Queue
-    Condition: cDeployIngestLambda
-    Properties:
-      # Any messages older than an hour are probably out-of-date
-      MessageRetentionPeriod: 36000
-      ReceiveMessageWaitTimeSeconds: 10
-      VisibilityTimeout: 300
-
-  FindingIngestEventQueueAlarm:
-    Type: AWS::CloudWatch::Alarm
-    Condition: cDeployIngestLambda
-    Properties:
-      ActionsEnabled: True
-      AlarmDescription: "Alert when Queue doesn't properly drain"
-      AlarmName: !Sub "${AWS::StackName}-FindingIngestQueue"
-      ComparisonOperator: GreaterThanOrEqualToThreshold
-      Dimensions:
-        - Name: QueueName
-          Value: !GetAtt FindingIngestEventQueue.QueueName
-      EvaluationPeriods: 1
-      MetricName: ApproximateNumberOfMessagesVisible
-      Namespace: AWS/SQS
-      Period: 300
-      Statistic: Average
-      Threshold: 8000
-      TreatMissingData: missing
       AlarmActions:
         - !If
           - cAlarmActions
@@ -1016,52 +771,6 @@ Resources:
   #
   # Alarms
   #
-  ImportProwlerFindingsFunctionErrorAlarm:
-    Type: AWS::CloudWatch::Alarm
-    Condition: cDeployIngestLambda
-    Properties:
-      AlarmName: !Sub ${ImportProwlerFindingsFunction}-LambdaErrors
-      AlarmDescription: "Alarm if lambda errors out"
-      Namespace: "AWS/Lambda"
-      MetricName: "Errors"
-      Dimensions:
-      - Name: "FunctionName"
-        Value: !Ref ImportProwlerFindingsFunction
-      Statistic: "Sum"
-      ComparisonOperator: "GreaterThanThreshold"
-      Threshold: 0
-      EvaluationPeriods: 1
-      Period: 60
-      TreatMissingData: "ignore"
-      AlarmActions:
-        - !If
-          - cAlarmActions
-          - !Ref pAlertTopicArn
-          - !Ref AWS::NoValue
-
-  ProcessFindingsFileFunctionErrorAlarm:
-    Type: AWS::CloudWatch::Alarm
-    Condition: cDeployIngestLambda
-    Properties:
-      AlarmName: !Sub ${ProcessFindingsFileFunction}-LambdaErrors
-      AlarmDescription: "Alarm if lambda errors out"
-      Namespace: "AWS/Lambda"
-      MetricName: "Errors"
-      Dimensions:
-      - Name: "FunctionName"
-        Value: !Ref ProcessFindingsFileFunction
-      Statistic: "Sum"
-      ComparisonOperator: "GreaterThanThreshold"
-      Threshold: 0
-      EvaluationPeriods: 1
-      Period: 60
-      TreatMissingData: "ignore"
-      AlarmActions:
-        - !If
-          - cAlarmActions
-          - !Ref pAlertTopicArn
-          - !Ref AWS::NoValue
-
   DecorateFindingsFunctionErrorAlarm:
     Type: AWS::CloudWatch::Alarm
     Properties:
@@ -1099,7 +808,6 @@ Resources:
   #       - MetricValue: "durationSeconds"
   #         MetricNamespace: !Ref pProwlerMetricNamespace
   #         MetricName: "ProwlerDuration"
-
 
   SuccessfulProwlerRunMetricFilter:
     Type: AWS::Logs::MetricFilter
@@ -1166,10 +874,6 @@ Outputs:
 
   ProwlerContainerTaskId:
     Value: !Ref ProwlerTaskDefinition
-
-  ProwlerRoleArn:
-    Value: !GetAtt LambdaRole.Arn
-    Condition: cDeployIngestLambda
 
   ProwlerBucket:
     Value: !Ref ProwlerBucket

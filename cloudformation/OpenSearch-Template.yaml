@@ -14,6 +14,7 @@
 
 AWSTemplateFormatVersion: '2010-09-09'
 Description: Create an OpenSearch Cluster for Prowler and Security Hub
+Transform: AWS::Serverless-2016-10-31
 
 Parameters:
 
@@ -21,6 +22,25 @@ Parameters:
     Description: Name of pre-existing Bucket to store findings and backups
     Type: String
 
+  pAuditRoleName:
+    Description: Default name of the AssumeRole to assume into accounts
+    Type: String
+    Default: security-audit
+
+  pTemplateURL:
+    Description: URL to the Transformed Template this stack was deployed with (for promotion to another environment)
+    Type: String
+
+  #
+  # Event Topics
+  #
+  pProwlerAWSEventNotificationTopic:
+    Description: SNS Topic ARN for the decorated Prowler Findings for AWS
+    Type: String
+
+  pProwlerGCPEventNotificationTopic:
+    Description: SNS Topic ARN for the Prowler Findings for GCP
+    Type: String
   #
   # OpenSearch Related Params
   #
@@ -50,14 +70,12 @@ Parameters:
     Description: IOPS for instance disk. Must be greater than 3000
     Default: 3000
 
-
   pEngineVersion:
     Type: String
     Description: What version of OpenSearch you want to use
     Default: "OpenSearch_2.11"
 
   # SAML Options
-
   pSAMLConfigSecret:
     Description: ARN of the Secrets Manager Secret with SAML Config Information
     Type: String
@@ -74,12 +92,29 @@ Parameters:
     Type: String
     Default: "NONE"
 
+  pAlertTopicArn:
+    Description: Topic To send Alarm Actions to
+    Type: String
+    Default: NONE
+
+
 Conditions:
   cEnableSAML: !Not [!Equals [ !Ref pSAMLConfigSecret, "NONE" ]]
-
+  cAlarmActions: !Not [!Equals [ !Ref pAlertTopicArn, "NONE" ]]
   cCustomEndpoint: !And
     - !Not [!Equals [ !Ref pCustomEndpoint, "NONE" ]]
     - !Not [!Equals [ !Ref pHostedZoneId, "NONE" ]]
+
+Globals:
+  Function:
+    Runtime: python3.11
+    MemorySize: 2048
+    Environment:
+      Variables:
+          ROLE_SESSION_NAME: !Ref AWS::StackName
+          BUCKET: !Ref pBucketName
+          ROLE_NAME: !Ref pAuditRoleName
+          LOG_LEVEL: 'INFO'
 
 Resources:
 
@@ -330,11 +365,279 @@ Resources:
             Effect: Allow
             Resource: '*'
 
+#
+# Ingest Lambda
+#
+  LambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service:
+            - lambda.amazonaws.com
+          Action:
+          - sts:AssumeRole
+      Path: /
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AWSOrganizationsReadOnlyAccess
+      Policies:
+      - PolicyName: S3Access
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Action:
+            - s3:*
+            Effect: Allow
+            Resource:
+              - !Sub 'arn:aws:s3:::${pBucketName}/*'
+              - !Sub 'arn:aws:s3:::${pBucketName}'
+          - Action:
+            - s3:ListAllMyBuckets
+            - s3:GetBucketLocation
+            Effect: Allow
+            Resource: '*'
+      - PolicyName: LambdaLogging
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Resource: '*'
+            Action:
+            - logs:*
+            Effect: Allow
+      - PolicyName: AssumeCrossAccountRole
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Effect: "Allow"
+            Action:
+            - sts:AssumeRole
+            Resource: !Sub "arn:aws:iam::*:role/${pAuditRoleName}"
+      - PolicyName: GetMessages
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Resource:
+            - !GetAtt S3EventQueue.Arn
+            - !GetAtt FindingIngestEventQueue.Arn
+            Action:
+            - sqs:*
+            Effect: Allow
+      - PolicyName: IndexData
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Resource: !Sub "${ProwlerESDomain.DomainArn}/*"
+            Action:
+            - es:*
+            Effect: Allow
 
+  ImportProwlerFindingsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub "${AWS::StackName}-import-findings"
+      Description: Import Prowler Findings into ElasticSearch
+      Handler: import_prowler_findings.handler
+      Role: !GetAtt LambdaRole.Arn
+      CodeUri: ../lambda
+      Timeout: 60
+      # TODO - Set Concurrency here
+      Events:
+        SQSIngest:
+          Type: SQS
+          Properties:
+            BatchSize: 100
+            MaximumBatchingWindowInSeconds: 60
+            Enabled: True
+            Queue: !GetAtt FindingIngestEventQueue.Arn
+      Environment:
+        Variables:
+          ES_DOMAIN_ENDPOINT: !GetAtt ProwlerESDomain.DomainEndpoint
 
+  ProcessFindingsFileFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub "${AWS::StackName}-process-finding-file"
+      Description: Process the Prowler file pushed to S3
+      Handler: process_prowler_file.handler
+      Role: !GetAtt LambdaRole.Arn
+      CodeUri: ../lambda
+      Timeout: 600
+      Events:
+        SQSIngest:
+          Type: SQS
+          Properties:
+            BatchSize: 1
+            Enabled: True
+            Queue: !GetAtt S3EventQueue.Arn
+      Environment:
+        Variables:
+          FINDING_QUEUE_URL: !Ref FindingIngestEventQueue
+
+  ImportProwlerFindingsFunctionErrorAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub ${ImportProwlerFindingsFunction}-LambdaErrors
+      AlarmDescription: "Alarm if lambda errors out"
+      Namespace: "AWS/Lambda"
+      MetricName: "Errors"
+      Dimensions:
+      - Name: "FunctionName"
+        Value: !Ref ImportProwlerFindingsFunction
+      Statistic: "Sum"
+      ComparisonOperator: "GreaterThanThreshold"
+      Threshold: 0
+      EvaluationPeriods: 1
+      Period: 60
+      TreatMissingData: "ignore"
+      AlarmActions:
+        - !If
+          - cAlarmActions
+          - !Ref pAlertTopicArn
+          - !Ref AWS::NoValue
+
+  ProcessFindingsFileFunctionErrorAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub ${ProcessFindingsFileFunction}-LambdaErrors
+      AlarmDescription: "Alarm if lambda errors out"
+      Namespace: "AWS/Lambda"
+      MetricName: "Errors"
+      Dimensions:
+      - Name: "FunctionName"
+        Value: !Ref ProcessFindingsFileFunction
+      Statistic: "Sum"
+      ComparisonOperator: "GreaterThanThreshold"
+      Threshold: 0
+      EvaluationPeriods: 1
+      Period: 60
+      TreatMissingData: "ignore"
+      AlarmActions:
+        - !If
+          - cAlarmActions
+          - !Ref pAlertTopicArn
+          - !Ref AWS::NoValue
+
+  #
+  # S3 -> SNS -> SQS -> Lambda Plumbing
+  #
+  S3EventQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      # Any messages older than an hour are probably out-of-date
+      MessageRetentionPeriod: 36000
+      ReceiveMessageWaitTimeSeconds: 10
+      VisibilityTimeout: 750
+
+  S3EventQueuePolicy:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      Queues:
+        - !Ref S3EventQueue
+      PolicyDocument:
+        Version: '2012-10-17'
+        Id: AllowS3
+        Statement:
+        - Sid: AllowS3EventNotification
+          Effect: Allow
+          Principal:
+            AWS: '*'
+          Action:
+          - SQS:SendMessage
+          Resource: !GetAtt S3EventQueue.Arn
+          Condition:
+            ArnLike:
+              aws:SourceArn: !Sub "arn:aws:s3:*:*:${pBucketName}"
+        - Sid: Allow-SNS-SendMessage
+          Effect: Allow
+          Principal: "*"
+          Action:
+          - sqs:SendMessage
+          Resource: !GetAtt S3EventQueue.Arn
+          Condition:
+            ArnEquals:
+              aws:SourceArn:
+                - !Ref pProwlerAWSEventNotificationTopic
+                - !Ref pProwlerGCPEventNotificationTopic
+
+  S3EventQueueSubscription:
+    Type: AWS::SNS::Subscription
+    Properties:
+      Endpoint: !GetAtt S3EventQueue.Arn
+      Protocol: sqs
+      TopicArn: !Ref pProwlerAWSEventNotificationTopic
+
+  S3EventQueueGCPSubscription:
+    Type: AWS::SNS::Subscription
+    Properties:
+      Endpoint: !GetAtt S3EventQueue.Arn
+      Protocol: sqs
+      TopicArn: !Ref pProwlerGCPEventNotificationTopic
+
+  S3EventQueueAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      ActionsEnabled: True
+      AlarmDescription: "Alert when Queue doesn't properly drain"
+      AlarmName: !Sub "${AWS::StackName}-FileProcessQueue"
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      Dimensions:
+        - Name: QueueName
+          Value: !GetAtt S3EventQueue.QueueName
+      EvaluationPeriods: 1
+      MetricName: ApproximateNumberOfMessagesVisible
+      Namespace: AWS/SQS
+      Period: 300
+      Statistic: Average
+      Threshold: 3
+      TreatMissingData: missing
+      AlarmActions:
+        - !If
+          - cAlarmActions
+          - !Ref pAlertTopicArn
+          - !Ref AWS::NoValue
+
+  #
+  # Finding Queue
+  #
+  FindingIngestEventQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      # Any messages older than an hour are probably out-of-date
+      MessageRetentionPeriod: 36000
+      ReceiveMessageWaitTimeSeconds: 10
+      VisibilityTimeout: 300
+
+  FindingIngestEventQueueAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      ActionsEnabled: True
+      AlarmDescription: "Alert when Queue doesn't properly drain"
+      AlarmName: !Sub "${AWS::StackName}-FindingIngestQueue"
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      Dimensions:
+        - Name: QueueName
+          Value: !GetAtt FindingIngestEventQueue.QueueName
+      EvaluationPeriods: 1
+      MetricName: ApproximateNumberOfMessagesVisible
+      Namespace: AWS/SQS
+      Period: 300
+      Statistic: Average
+      Threshold: 8000
+      TreatMissingData: missing
+      AlarmActions:
+        - !If
+          - cAlarmActions
+          - !Ref pAlertTopicArn
+          - !Ref AWS::NoValue
 
 
 Outputs:
+  TemplateURL:
+    Description: URL to the Transformed Template this stack was deployed with (for promotion to another environment)
+    Value: !Ref pTemplateURL
 
   DomainName:
     Value: !Ref pDomainName
