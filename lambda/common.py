@@ -199,6 +199,22 @@ class DynamoDBTable:
         
         logger.info(f"wrote {written_items} items to DynamoDB table {self.table_name}")
 
+    def update_item_single_field(self, primary_key: str, primary_key_value: str, field_name: str, new_value: str):
+        self.table.update_item(
+            Key={
+                primary_key: primary_key_value  # Primary key attribute
+            },
+            UpdateExpression=f"SET {field_name} = :new_value",
+            ExpressionAttributeValues={
+                ":new_time": new_value
+            },
+            ReturnValues="NONE"
+        )
+
+    def update_findings_event_time(self, items: List[Dict]):
+        for item in items:
+            self.update_item_single_field("finding_info_uid", item.get("finding_info_uid"), "event_time", item.get("event_time"))
+
     def paginate_query(self, index_name: str, key_condition_expression: "Key", projection_expression: str) -> List[Dict]:
         """
         Standard table query that will automatically paginate, if applicable
