@@ -119,25 +119,34 @@ all new findings to be written to DDB
             elif f["event_time"] < existing_finding.get("start_time"):
                 logger.info("finding event time is before dynamodb start time, updating table")
             f["start_time"] = f["event_time"]
-            ddb_finding = copy.deepcopy(f)
-            ddb_finding.pop("unmapped", None)
             processed_findings.append(f)
-            # Don't want to add these to the output file (unnecessary), but do want them to be added to DDB
-            ddb_finding["finding_info_uid"] = ddb_finding["finding_info"]["uid"]
-            ddb_finding["metadata_event_code"] = ddb_finding["metadata"]["event_code"]
-            ddb_finding["cloud_account_uid"] = ddb_finding["cloud"]["account"]["uid"]
+            ddb_finding = create_ddb_finding(f)
             new_findings.append(ddb_finding)
         # If finding already in table and the finding event time is after the existing record's start time, just write new start time to S3 output file
         else:
             logger.debug(f"finding uid {finding_uid} found in dynamodb and has a start time of {existing_finding.get('start_time')}, adding to output file")
+            # Need to ensure start time is unchanged from original start time when overwriting to ddb
             f["start_time"] = existing_finding.get("start_time")
             processed_findings.append(f)
+            ddb_finding = create_ddb_finding(f)
+            logger.info(f"finding uid {finding_uid} found in dynamodb and has an event time of {ddb_finding.get('event_time')}, updating in table")
+            new_findings.append(ddb_finding)
 
     new_findings = remove_duplicate_findings(new_findings)
 
     logger.info(f"account id {account_id}: processed {len(processed_findings)} findings with {len(new_findings)} new findings")
 
     return processed_findings, new_findings
+
+def create_ddb_finding(finding: Dict) -> Dict:
+    """Given a finding dictionary, clean up fields and add required fields for writing to DDB"""
+    ddb_finding = copy.deepcopy(finding)
+    ddb_finding.pop("unmapped", None)
+    ddb_finding["finding_info_uid"] = ddb_finding["finding_info"]["uid"]
+    ddb_finding["metadata_event_code"] = ddb_finding["metadata"]["event_code"]
+    ddb_finding["cloud_account_uid"] = ddb_finding["cloud"]["account"]["uid"]
+
+    return ddb_finding
 
 def remove_duplicate_findings(findings: List[Dict]) -> List[Dict]:
     """
@@ -162,4 +171,3 @@ def remove_duplicate_findings(findings: List[Dict]) -> List[Dict]:
 
     # Convert the dictionary back to a list
     return list(uid_dict.values())
-    
