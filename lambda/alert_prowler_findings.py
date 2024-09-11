@@ -52,8 +52,9 @@ def handler(event, context):
         finding_uid = new_image.get("finding_info_uid")
         metadata_event_code = new_image.get("metadata_event_code")
         if metadata_event_code not in config_data.get("ProwlerChecks", []):
+            logger.info(f"Check {metadata_event_code} is not in the list of checks to alert on")
             continue
-        
+
         blocks = generate_finding_alert(ddb_entry)
         try:
             send_slack_message(SLACK_API_TOKEN, SLACK_CHANNEL_ID, blocks=blocks)
@@ -66,7 +67,7 @@ def handler(event, context):
             except SlackAuthException:
                 logger.error(f"Slack secret is not working properly. Failed to send alert to slack for finding id {finding_uid}")
 
-        
+
 def generate_finding_alert(finding: Dict) -> List[Dict]:
     """Given a finding, create the slack formatted message"""
     new_finding_data = finding.get("NewImage", {})
