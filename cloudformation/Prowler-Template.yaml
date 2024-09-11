@@ -766,7 +766,40 @@ Resources:
             ProjectionType: "ALL"
       StreamSpecification:
         StreamViewType: NEW_IMAGE
+      SSESpecification:
+        SSEEnabled: true
+        KMSMasterKeyId: !Ref ProwlerFindingsTrackingTableKey
     DeletionPolicy: RetainExceptOnCreate
+
+  ProwlerFindingsTrackingTableKey:
+    Type: AWS::KMS::Key
+    Properties:
+      Description: "KMS key to encrypt findings DynamoDB table"
+      KeyPolicy:
+        Id: DynamoDB
+        Version: '2012-10-17'
+        Statement:
+          - Sid: Enable IAM User Permissions
+            Effect: Allow
+            Principal:
+              AWS: !Sub "arn:aws:iam::${AWS::AccountId}:root"
+            Action: 
+              - "kms:*"
+            Resource: "*"
+          - Sid: DynamoDB Permissions
+            Effect: Allow
+            Principal:
+              Service: dynamodb.amazonaws.com
+            Action:
+              - "kms:GenerateDataKey"
+              - "kms:Decrypt"
+            Resource: "*"
+
+  ProwlerFindingsTrackingTableKeyAlias:
+    Type: AWS::KMS::Alias
+    Properties:
+      AliasName: !Sub "alias/${pTableName}-dynamodb-key"
+      TargetKeyId: !Ref ProwlerFindingsTrackingTableKey
 
   #
   # Alarms
