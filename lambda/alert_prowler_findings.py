@@ -55,6 +55,10 @@ def handler(event, context):
             logger.info(f"Check {metadata_event_code} is not in the list of checks to alert on")
             continue
 
+        if record["eventName"] != "INSERT":
+            logger.info(f"Finding {finding_uid} already exists and will not be re-alerted on")
+            continue
+
         blocks = generate_finding_alert(ddb_entry)
         try:
             send_slack_message(SLACK_API_TOKEN, SLACK_CHANNEL_ID, blocks=blocks)
