@@ -47,6 +47,8 @@ def handler(event, context):
     logger.debug("Received event: " + json.dumps(event, sort_keys=True))
 
     for record in event["Records"]:
+        if record['eventName'] != "INSERT":
+            continue
         ddb_entry = ddb_json.loads(record["dynamodb"])
         new_image = ddb_entry.get("NewImage", {})
         finding_uid = new_image.get("finding_info_uid")
