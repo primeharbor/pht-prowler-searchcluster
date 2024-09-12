@@ -16,6 +16,7 @@ import copy
 import json
 import logging
 import os
+import datetime
 from typing import Dict, List, Tuple
 
 from boto3.dynamodb.conditions import Key
@@ -90,7 +91,7 @@ def process_account_findings(findings_to_process: List[Dict]) -> Tuple[List[Dict
         findings_to_process (List[Dict]): List of prowler dictionary findings
 
     Returns:
-        processed_findings, new_findings (Tuple[List[Dict], List[Dict]]): List of prowler dictionary findings with additional fields from DDB, 
+        processed_findings, new_findings (Tuple[List[Dict], List[Dict]]): List of prowler dictionary findings with additional fields from DDB,
 all new findings to be written to DDB
     """
     logger.info(f"processing {len(findings_to_process)} findings")
@@ -140,11 +141,25 @@ all new findings to be written to DDB
 
 def create_ddb_finding(finding: Dict) -> Dict:
     """Given a finding dictionary, clean up fields and add required fields for writing to DDB"""
-    ddb_finding = copy.deepcopy(finding)
-    ddb_finding.pop("unmapped", None)
-    ddb_finding["finding_info_uid"] = ddb_finding["finding_info"]["uid"]
-    ddb_finding["metadata_event_code"] = ddb_finding["metadata"]["event_code"]
-    ddb_finding["cloud_account_uid"] = ddb_finding["cloud"]["account"]["uid"]
+    ddb_finding = {}
+
+    ddb_finding["finding_info_uid"] = finding["finding_info"]["uid"]
+    ddb_finding["metadata_event_code"] = finding["metadata"]["event_code"]
+    ddb_finding["cloud_account_uid"] = finding["cloud"]["account"]["uid"]
+    ddb_finding["event_time"] = finding["event_time"]
+    ddb_finding["severity"] = finding["severity"]
+    ddb_finding["start_time"] = finding["start_time"]
+    ddb_finding["status_detail"] = finding["status_detail"]
+    ddb_finding["title"] = finding["finding_info"]["title"]
+
+    # Define the format of the date string
+    date_format = "%Y-%m-%dT%H:%M:%S.%f"
+
+    # Convert the date string to a datetime object
+    date_obj = datetime.strptime(finding["event_time"], date_format)
+    ddb_finding["event_time_epoch_ts"] = date_obj.timestamp()
+    date_obj = datetime.strptime(finding["start_time"], date_format)
+    ddb_finding["start_time_epoch_ts"] = date_obj.timestamp()
 
     return ddb_finding
 
