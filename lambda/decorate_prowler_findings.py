@@ -12,17 +12,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from boto3.dynamodb.conditions import Key
+from datetime import datetime
+from typing import Dict, List, Tuple
 import copy
 import json
 import logging
 import os
-import datetime
-from typing import Dict, List, Tuple
-
-from boto3.dynamodb.conditions import Key
 
 from common import DynamoDBTable, get_object, put_dict_object
-
 
 logger = logging.getLogger()
 logger.setLevel(getattr(logging, os.getenv('LOG_LEVEL', default='INFO')))
@@ -157,9 +155,9 @@ def create_ddb_finding(finding: Dict) -> Dict:
 
     # Convert the date string to a datetime object
     date_obj = datetime.strptime(finding["event_time"], date_format)
-    ddb_finding["event_time_epoch_ts"] = date_obj.timestamp()
+    ddb_finding["event_time_epoch_ts"] = int(date_obj.timestamp())
     date_obj = datetime.strptime(finding["start_time"], date_format)
-    ddb_finding["start_time_epoch_ts"] = date_obj.timestamp()
+    ddb_finding["start_time_epoch_ts"] =  int(date_obj.timestamp())
 
     return ddb_finding
 
