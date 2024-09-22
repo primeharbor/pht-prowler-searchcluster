@@ -768,6 +768,7 @@ Resources:
         StreamViewType: NEW_IMAGE
       SSESpecification:
         SSEEnabled: true
+        SSEType: KMS
         KMSMasterKeyId: !Ref ProwlerFindingsTrackingTableKey
     DeletionPolicy: RetainExceptOnCreate
 
@@ -783,7 +784,7 @@ Resources:
             Effect: Allow
             Principal:
               AWS: !Sub "arn:aws:iam::${AWS::AccountId}:root"
-            Action: 
+            Action:
               - "kms:*"
             Resource: "*"
           - Sid: DynamoDB Permissions
