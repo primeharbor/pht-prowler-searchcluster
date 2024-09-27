@@ -537,6 +537,12 @@ Resources:
             - dynamodb:BatchWriteItem
             - dynamodb:UpdateItem
             Effect: Allow
+          - Resource:
+            - !GetAtt ProwlerFindingsTrackingTableKey.Arn
+            Action:
+            - kms:*
+            Effect: Allow
+
 
   DecorateFindingsFunction:
     Type: AWS::Serverless::Function
