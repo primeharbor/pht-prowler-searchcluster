@@ -16,10 +16,9 @@
 
 
 SEARCH_STACKNAME=$1
-PROWLER_STACKNAME=$2
 
-if [ -z $PROWLER_STACKNAME ] ; then
-    echo "Usage: $0 SEARCH_STACKNAME PROWLER_STACKNAME"
+if [ -z $SEARCH_STACKNAME ] ; then
+    echo "Usage: $0 SEARCH_STACKNAME"
     exit 1
 fi
 
@@ -31,9 +30,9 @@ fi
 
 OSPASSWD=`aws secretsmanager get-secret-value --secret-id $SECRET_ID  --query SecretString --output text | jq -r .MasterUserPassword`
 ENDPOINT=`aws cloudformation describe-stacks --stack-name ${SEARCH_STACKNAME} --output text --query "Stacks[0].Outputs[?OutputKey=='DomainEndpointURL'].OutputValue" `
-LAMBDA_ROLE=`aws cloudformation describe-stacks --stack-name ${PROWLER_STACKNAME} --output text --query "Stacks[0].Outputs[?OutputKey=='ProwlerRoleArn'].OutputValue" `
+LAMBDA_ROLE=`aws cloudformation describe-stacks --stack-name ${SEARCH_STACKNAME} --output text --query "Stacks[0].Outputs[?OutputKey=='LambdaRoleArn'].OutputValue" `
 if [[ -z $LAMBDA_ROLE ]] ; then
-    echo "Failed to find Lambda role in stack $PROWLER_STACKNAME"
+    echo "Failed to find Lambda role in stack $SEARCH_STACKNAME"
     exit 1
 fi
 
