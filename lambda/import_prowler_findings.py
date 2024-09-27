@@ -34,8 +34,6 @@ logging.getLogger('urllib3').setLevel(logging.WARNING)
 def handler(event, context):
     logger.debug("Received event: " + json.dumps(event, sort_keys=True))
 
-    today = dt.datetime.today().strftime('%Y-%m-%d')
-
     region = os.environ['AWS_REGION']
     service = 'es'
     credentials = boto3.Session().get_credentials()
@@ -68,7 +66,8 @@ def handler(event, context):
         logger.debug(f"Indexing finding for {finding_body['finding_info']['uid']} with a status of {finding_body['status_code']}")
 
         # Give each finding a unique document id so we can track overtime.
-        doc_id = f"{finding_body['finding_info']['uid']}-{today}"
+        finding_day = finding_body['event_time'].split("T")[0]
+        doc_id = f"{finding_body['finding_info']['uid']}-{finding_day}"
 
         command = {"index": {"_index": index, "_id": doc_id}}
         command_str = json.dumps(command, separators=(',', ':'))
