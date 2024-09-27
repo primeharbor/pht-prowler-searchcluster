@@ -660,6 +660,7 @@ Outputs:
   AdminLoginCredentials:
     Value: !Ref OpenSearchAdminCredentials
 
-
+  LambdaRoleArn:
+    Value: !GetAtt LambdaRole.Arn
 
 # EOF
