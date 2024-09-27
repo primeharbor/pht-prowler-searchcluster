@@ -36,8 +36,6 @@ def handler(event, context):
     sqs_client = boto3.client('sqs')
     queue_url = os.environ['FINDING_QUEUE_URL']
 
-    org_details = get_org_account_details()
-
     for record in event['Records']:
         if 'body' in record:
             sns_message = json.loads(record['body'])
