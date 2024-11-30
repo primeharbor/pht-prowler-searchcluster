@@ -111,6 +111,9 @@ all new findings to be written to DDB
             continue
 
         existing_finding = existing_finding_uids.get(finding_uid, {})
+        # Prowler changed the format of the OSCF output and renamed event_time to time_dt.
+        # We copy it back
+        f['event_time'] = f['time_dt']
         if not existing_finding or f["event_time"] < existing_finding.get("start_time"):
             if finding_uid not in existing_finding_uids:
                 logger.info(f"finding uid {finding_uid} not found in dynamodb, adding to table")
