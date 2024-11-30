@@ -128,7 +128,7 @@ Conditions:
 Globals:
   Function:
     Runtime: python3.11
-    MemorySize: 2048
+    MemorySize: 4096
     Environment:
       Variables:
           ROLE_SESSION_NAME: !Ref AWS::StackName

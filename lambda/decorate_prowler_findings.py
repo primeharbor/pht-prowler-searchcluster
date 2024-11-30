@@ -116,10 +116,10 @@ all new findings to be written to DDB
         f['event_time'] = f['time_dt']
         if not existing_finding or f["event_time"] < existing_finding.get("start_time"):
             if finding_uid not in existing_finding_uids:
-                logger.info(f"finding uid {finding_uid} not found in dynamodb, adding to table")
+                logger.debug(f"finding uid {finding_uid} not found in dynamodb, adding to table")
             # Handle possible scenario where incoming finding was processed out of order and the start time is earlier even though the finding has already been written to table
             elif f["event_time"] < existing_finding.get("start_time"):
-                logger.info("finding event time is before dynamodb start time, updating table")
+                logger.debug("finding event time is before dynamodb start time, updating table")
             f["start_time"] = f["event_time"]
             processed_findings.append(f)
             ddb_finding = create_ddb_finding(f)
@@ -131,7 +131,7 @@ all new findings to be written to DDB
             f["start_time"] = existing_finding.get("start_time")
             processed_findings.append(f)
             ddb_finding = create_ddb_finding(f)
-            logger.info(f"finding uid {finding_uid} found in dynamodb and has an event time of {ddb_finding.get('event_time')}, updating in table")
+            logger.debug(f"finding uid {finding_uid} found in dynamodb and has an event time of {ddb_finding.get('event_time')}, updating in table")
             new_findings.append(ddb_finding)
 
     new_findings = remove_duplicate_findings(new_findings)
