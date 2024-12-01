@@ -150,7 +150,7 @@ def create_ddb_finding(finding: Dict) -> Dict:
     ddb_finding["event_time"] = finding["event_time"]
     ddb_finding["severity"] = finding["severity"]
     ddb_finding["start_time"] = finding["start_time"]
-    ddb_finding["status_detail"] = finding["status_detail"]
+    ddb_finding["status_detail"] = finding["status_detail"][:512]
     ddb_finding["title"] = finding["finding_info"]["title"]
 
     # Define the format of the date string
