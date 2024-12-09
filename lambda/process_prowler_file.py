@@ -64,5 +64,8 @@ def handler(event, context):
                 if f['status_code'] == "MANUAL":
                     continue
                 logger.debug(f"queueing {json.dumps(f, default=str)}")
-                response = sqs_client.send_message(QueueUrl=queue_url, MessageBody=json.dumps(f, default=str))
+                try:
+                    response = sqs_client.send_message(QueueUrl=queue_url, MessageBody=json.dumps(f, default=str))
+                except Exception as e:
+                    logger.error(f"Failed to process finding {f['finding_info']['uid']} in s3://{bucket}/{obj_key}. Error: {e}")
 
