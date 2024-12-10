@@ -48,11 +48,15 @@ Parameters:
     Description: Hostname of the Domain Endpoint
     Type: String
 
+  pLambdaSize:
+    Description: Memory/CPU Size of the Lambda
+    Type: String
+    Default: 2048
 
 Globals:
   Function:
     Runtime: python3.9
-    MemorySize: 2048
+    MemorySize: !Ref pLambdaSize
     Timeout: 300
     Environment:
       Variables:

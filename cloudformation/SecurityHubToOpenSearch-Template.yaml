@@ -31,6 +31,11 @@ Parameters:
     Description: URL to the Transformed Template this stack was deployed with (for promotion to another environment)
     Type: String
 
+  pLambdaSize:
+    Description: Memory/CPU Size of the Lambda
+    Type: String
+    Default: 2048
+
   #
   # OpenSearch Related Params
   #
@@ -46,7 +51,7 @@ Parameters:
 Globals:
   Function:
     Runtime: python3.9
-    MemorySize: 2048
+    MemorySize: !Ref pLambdaSize
     Timeout: 300
     Environment:
       Variables:

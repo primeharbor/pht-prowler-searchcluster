@@ -120,6 +120,11 @@ Parameters:
     Type: AWS::EC2::VPC::Id
     Description: VPC to use for the Fargate containers
 
+  pLambdaSize:
+    Description: Memory/CPU Size of the Lambda
+    Type: String
+    Default: 4096
+
 Conditions:
   cProwlerSlackSecret: !Not [!Equals [ !Ref pProwlerSlackSecret, "NONE" ]]
   cDeployAlertLambda: !Not [!Equals [ !Ref pFindingAlertSlackSecret, "NONE" ]]
@@ -128,7 +133,7 @@ Conditions:
 Globals:
   Function:
     Runtime: python3.11
-    MemorySize: 4096
+    MemorySize: !Ref pLambdaSize
     Environment:
       Variables:
           ROLE_SESSION_NAME: !Ref AWS::StackName

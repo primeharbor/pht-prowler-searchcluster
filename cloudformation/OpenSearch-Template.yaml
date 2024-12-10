@@ -97,6 +97,10 @@ Parameters:
     Type: String
     Default: NONE
 
+  pLambdaSize:
+    Description: Memory/CPU Size of the Lambda
+    Type: String
+    Default: 2048
 
 Conditions:
   cEnableSAML: !Not [!Equals [ !Ref pSAMLConfigSecret, "NONE" ]]
@@ -108,7 +112,7 @@ Conditions:
 Globals:
   Function:
     Runtime: python3.11
-    MemorySize: 2048
+    MemorySize: !Ref pLambdaSize
     Environment:
       Variables:
           ROLE_SESSION_NAME: !Ref AWS::StackName
