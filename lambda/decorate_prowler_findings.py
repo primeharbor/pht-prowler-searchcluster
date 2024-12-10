@@ -103,6 +103,10 @@ all new findings to be written to DDB
     new_findings = [] # findings to be added to dynamodb
     processed_findings = [] # full list of processed findings
     for f in findings_to_process:
+        # Prowler changed the format of the OSCF output and renamed event_time to time_dt.
+        # We copy it back
+        f['event_time'] = f['time_dt']
+
         finding_uid = f["finding_info"]["uid"]
         # If the finding is PASS/MANUAL, just write to output file as-is
         if f["status_code"] != "FAIL":
@@ -111,9 +115,6 @@ all new findings to be written to DDB
             continue
 
         existing_finding = existing_finding_uids.get(finding_uid, {})
-        # Prowler changed the format of the OSCF output and renamed event_time to time_dt.
-        # We copy it back
-        f['event_time'] = f['time_dt']
         if not existing_finding or f["event_time"] < existing_finding.get("start_time"):
             if finding_uid not in existing_finding_uids:
                 logger.debug(f"finding uid {finding_uid} not found in dynamodb, adding to table")
