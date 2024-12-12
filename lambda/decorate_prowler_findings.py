@@ -108,7 +108,7 @@ all new findings to be written to DDB
         f['event_time'] = f['time_dt']
 
         # Truncate crazy status_detail lines
-        f["status_detail"] = ["status_detail"][:512]
+        f["status_detail"] = f["status_detail"][:512]
 
         finding_uid = f["finding_info"]["uid"]
         # If the finding is PASS/MANUAL, just write to output file as-is
