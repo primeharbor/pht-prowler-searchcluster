@@ -1,4 +1,4 @@
-# Copyright 2023 Chris Farris <chrisf@primeharbor.com>
+# Copyright 2025 Chris Farris <chrisf@primeharbor.com>
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,15 +13,14 @@
 # limitations under the License.
 
 
+from boto3.dynamodb.types import TypeDeserializer
+from botocore.exceptions import ClientError
+from typing import Dict, List
 import json
 import logging
 import os
-from typing import Dict, List
-
-from dynamodb_json import json_util as ddb_json
 
 from common import get_object, get_slack_secret, send_slack_message, SlackAuthException
-
 
 logger = logging.getLogger()
 logger.setLevel(getattr(logging, os.getenv("LOG_LEVEL", default="INFO")))
@@ -47,73 +46,50 @@ def handler(event, context):
     logger.debug("Received event: " + json.dumps(event, sort_keys=True))
 
     for record in event["Records"]:
-        if record['eventName'] != "INSERT":
+        if record['eventSource'] != "aws:dynamodb":
             continue
-        ddb_entry = ddb_json.loads(record["dynamodb"])
-        new_image = ddb_entry.get("NewImage", {})
-        finding_uid = new_image.get("finding_info_uid")
-        metadata_event_code = new_image.get("metadata_event_code")
-        if metadata_event_code not in config_data.get("ProwlerChecks", []):
-            logger.info(f"Check {metadata_event_code} is not in the list of checks to alert on")
-            continue
-
-        blocks = generate_finding_alert(ddb_entry)
-        try:
-            send_slack_message(SLACK_API_TOKEN, SLACK_CHANNEL_ID, blocks=blocks)
-            logger.info(f"Successfully sent alert to slack for finding id {finding_uid}")
-        except SlackAuthException:
-            slack_api_token, slack_channel_id = get_slack_secret(SLACK_SECRET_ARN)
+        if record['eventName'] == "INSERT":
+            ddb_record = record['dynamodb']['NewImage']
+            logger.debug(ddb_record)
+            new_image = deseralize(ddb_record)
+            finding_uid = new_image.get("finding_info_uid")
+            metadata_event_code = new_image.get("metadata_event_code")
+            if metadata_event_code not in config_data.get("ProwlerChecks", []):
+                logger.info(f"Check {metadata_event_code} is not in the list of checks to alert on")
+                continue
+            blocks = generate_finding_alert(new_image)
+            logger.debug(json.dumps(blocks, default=str))
             try:
-                send_slack_message(slack_api_token, slack_channel_id, blocks=blocks)
-                logger.info(f"Successfully sent alert to slack for finding id {finding_uid} after refreshing slack secret")
+                send_slack_message(SLACK_API_TOKEN, SLACK_CHANNEL_ID, blocks=blocks)
+                logger.info(f"Successfully sent alert to slack for finding id {finding_uid}")
             except SlackAuthException:
-                logger.error(f"Slack secret is not working properly. Failed to send alert to slack for finding id {finding_uid}")
+                slack_api_token, slack_channel_id = get_slack_secret(SLACK_SECRET_ARN)
+                try:
+                    send_slack_message(slack_api_token, slack_channel_id, blocks=blocks)
+                    logger.info(f"Successfully sent alert to slack for finding id {finding_uid} after refreshing slack secret")
+                except SlackAuthException:
+                    logger.error(f"Slack secret is not working properly. Failed to send alert to slack for finding id {finding_uid}")
 
 
-def generate_finding_alert(finding: Dict) -> List[Dict]:
+def generate_finding_alert(new_finding_data: Dict) -> List[Dict]:
     """Given a finding, create the slack formatted message"""
-    new_finding_data = finding.get("NewImage", {})
-    finding_title = new_finding_data["finding_info"]["title"]
     aws_account = new_finding_data["cloud_account_uid"]
-    aws_account_name = new_finding_data.get("cloud", {}).get("account", {}).get("name")
+    finding_info_uid = new_finding_data["finding_info_uid"]
+    finding_title = new_finding_data["title"]
     metadata_event_code = new_finding_data["metadata_event_code"]
-    status_detail = new_finding_data["status_detail"]
     severity = new_finding_data["severity"]
-    resource_fields = []
-    for resource in new_finding_data.get("resources", []):
-        resource_fields.append(
-            {
-                "type": "mrkdwn",
-                "text": f"*Resource Name:* `{resource.get('name')}`"
-            }
-        )
-        resource_fields.append(
-            {
-                "type": "mrkdwn",
-                "text": f"*Resource ARN:* `{resource.get('uid')}`"
-            }
-        )
-
+    status_detail = new_finding_data["status_detail"]
     blocks = [
         {
             "type": "section",
             "text": {
                 "type": "mrkdwn",
-                "text": f"*{severity} severity prowler finding `{metadata_event_code}` discovered in account `{aws_account}`*"
-            }
-        },
-        {
-            "type": "section",
-            "text": {
-                "type": "mrkdwn",
-                "text": f"*Finding Title:* {finding_title}"
-            }
-        },
-        {
-            "type": "section",
-            "text": {
-                "type": "mrkdwn",
-                "text": f"*Status Detail:* {status_detail}"
+                "text": f"""
+*{severity} severity prowler finding discovered in account `{aws_account}`*
+*Finding Title:* {finding_title}
+*Status Detail:* {status_detail}
+*Finding ID:* `{finding_info_uid}`
+                """
             }
         },
         {
@@ -121,18 +97,23 @@ def generate_finding_alert(finding: Dict) -> List[Dict]:
             "fields": [
                 {
                     "type": "mrkdwn",
-                    "text": f"*Account Name:* `{aws_account_name}`"
+                    "text": f"*Finding Type:* `{metadata_event_code}`"
                 },
                 {
                     "type": "mrkdwn",
                     "text": f"*Account ID:* `{aws_account}`"
                 },
             ]
-        },
-        {
-            "type": "section",
-            "fields": resource_fields
         }
     ]
 
     return blocks
+
+def deseralize(ddb_record):
+    # This is probablt a semi-dangerous hack.
+    # https://github.com/boto/boto3/blob/e353ecc219497438b955781988ce7f5cf7efae25/boto3/dynamodb/types.py#L233
+    ds = TypeDeserializer()
+    output = {}
+    for k, v in ddb_record.items():
+        output[k] = ds.deserialize(v)
+    return(output)
