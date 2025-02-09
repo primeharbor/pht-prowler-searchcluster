@@ -15,7 +15,7 @@
 import json
 import logging
 import os
-import requests
+import urllib3
 from time import sleep
 from typing import Dict, List, Optional
 import yaml
@@ -50,8 +50,7 @@ def get_object(bucket, obj_key, type: Optional[str] = "json"):
         else:
             logger.error("Error getting resource s3://{}/{}: {}".format(bucket, obj_key, e))
         return(None)
-    
-    
+
 def put_object(bucket: str, obj_key: str, content: bytes, **kwargs):
     s3 = boto3.client("s3")
     put_object_kwargs = {"Bucket": bucket, "Key": unquote(obj_key), "Body": content}
@@ -116,7 +115,7 @@ def get_secret(secret_arn):
             secret = json.loads(secret)
         except json.JSONDecodeError:
             # If it's not JSON, just return the string
-            pass  
+            pass
 
         return secret
 
@@ -129,7 +128,7 @@ def get_secret(secret_arn):
             logger.error(f"Unexpected ClientError: {e}")
 
         return None
-    
+
 def get_slack_secret(secret_arn):
     """Re-usable function specifically for the expected slack secret"""
     slack_secret = get_secret(secret_arn)
@@ -138,7 +137,7 @@ def get_slack_secret(secret_arn):
     slack_channel_id = slack_secret["SLACK_CHANNEL_ID"]
 
     return slack_api_token, slack_channel_id
-    
+
 class SlackException(Exception):
     pass
 
@@ -147,8 +146,9 @@ class SlackAuthException(SlackException):
 
 def send_slack_message(token: str, channel_id: str, text: Optional[str] = None, blocks: Optional[List[Dict]] = None):
     url = "https://slack.com/api/chat.postMessage"
-    headers = {"Authorization": f"Bearer {token}"}
+    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
     payload = {"channel": channel_id}
+
     if text:
         payload["text"] = text
     elif blocks:
@@ -156,11 +156,13 @@ def send_slack_message(token: str, channel_id: str, text: Optional[str] = None, 
     else:
         raise ValueError("Either 'text' or 'blocks' are required.")
 
-    response = requests.post(url, headers=headers, json=payload)
-    
-    response.raise_for_status
+    http = urllib3.PoolManager()
+    response = http.request("POST", url, body=json.dumps(payload), headers=headers)
 
-    response_content = json.loads(response.content)
+    if response.status != 200:
+        raise SlackException(f"HTTP error {response.status}: {response.data.decode('utf-8')}")
+
+    response_content = json.loads(response.data.decode("utf-8"))
     if not response_content.get("ok", True):
         if response_content.get("error") == "invalid_auth":
             raise SlackAuthException()
@@ -186,7 +188,7 @@ class DynamoDBTable:
         """
         if batch_size > 25:
             batch_size = 25
-            
+
         logger.info(f"writing {len(items)} items to DynamoDB table {self.table_name}")
 
         written_items = 0
@@ -196,7 +198,7 @@ class DynamoDBTable:
             with self.table.batch_writer() as batch_writer:
                 for item in batch:
                     batch_writer.put_item(Item=item)
-        
+
         logger.info(f"wrote {written_items} items to DynamoDB table {self.table_name}")
 
     def paginate_query(self, index_name: str, key_condition_expression: "Key", projection_expression: str) -> List[Dict]:
@@ -218,7 +220,7 @@ class DynamoDBTable:
             ProjectionExpression=projection_expression
         )
         combined_response.extend(response.get("Items", []))
-    
+
         while "LastEvaluatedKey" in response:
             response = self.table.query(
                 IndexName=index_name,
