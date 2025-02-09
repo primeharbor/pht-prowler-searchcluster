@@ -548,7 +548,6 @@ Resources:
             - kms:*
             Effect: Allow
 
-
   DecorateFindingsFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -605,6 +604,15 @@ Resources:
                 - dynamodb:ListStreams
               Resource:
                 - !GetAtt ProwlerFindingsTrackingTable.StreamArn
+      - PolicyName: DDBKMSDecrypt
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - kms:Decrypt
+              Resource:
+                - !GetAtt ProwlerFindingsTrackingTableKey.Arn
       - PolicyName: AccessSlackSecret
         PolicyDocument:
           Statement:
