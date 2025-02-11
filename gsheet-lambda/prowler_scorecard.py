@@ -33,7 +33,7 @@ logging.getLogger('botocore').setLevel(logging.WARNING)
 logging.getLogger('boto3').setLevel(logging.WARNING)
 logging.getLogger('urllib3').setLevel(logging.WARNING)
 
-HEADER_ROW = ['FindingUniqueId', 'AssessmentStartTime', 'FindingFirstSeen', 'AgeInDays', 'AccountId', 'AccountName', 'CheckID', "Severity", 'Status', "CheckTitle", "ServiceName", "SubServiceName", "Region", "ResourceArn", "ResourceName",  "StatusExtended"]
+HEADER_ROW = ['FindingUniqueId', 'AssessmentStartTime', 'FindingFirstSeen', 'AgeInDays', 'AccountId', 'AccountName', 'CheckID', "Severity", 'Status', "CheckTitle", "ServiceName", "SubServiceName", "Region", "ResourceArn", "ResourceName",  "Tags", "StatusExtended"]
 
 
 # Lambda execution starts here
@@ -166,6 +166,7 @@ def process_prowler_ocsf(f):
         f['resources'][0]['region'],
         f['resources'][0]['uid'],
         f['resources'][0]['name'],
+        ' | '.join(f['resources'][0]['labels']),
         f['status_detail'][:512],
     ]
     return(row)
