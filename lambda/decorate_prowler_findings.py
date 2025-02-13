@@ -90,7 +90,7 @@ def process_account_findings(findings_to_process: List[Dict]) -> Tuple[List[Dict
 
     Returns:
         processed_findings, new_findings (Tuple[List[Dict], List[Dict]]): List of prowler dictionary findings with additional fields from DDB,
-all new findings to be written to DDB
+        all new findings to be written to DDB
     """
     logger.info(f"processing {len(findings_to_process)} findings")
     # Query for all findings just from the account number

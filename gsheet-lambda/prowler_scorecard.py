@@ -33,7 +33,7 @@ logging.getLogger('botocore').setLevel(logging.WARNING)
 logging.getLogger('boto3').setLevel(logging.WARNING)
 logging.getLogger('urllib3').setLevel(logging.WARNING)
 
-HEADER_ROW = ['FindingUniqueId', 'AssessmentStartTime', 'FindingFirstSeen', 'AgeInDays', 'AccountId', 'AccountName', 'CheckID', "Severity", 'Status', "CheckTitle", "ServiceName", "SubServiceName", "Region", "ResourceArn", "ResourceName",  "Tags", "StatusExtended"]
+HEADER_ROW = ['FindingUniqueId', 'AssessmentStartTime', 'FindingFirstSeen', 'AgeInDays', 'AccountId', 'AccountName', 'CheckID', "Severity", 'Status', "CheckTitle", "ServiceName", "SubServiceName", "Region", "ResourceArn", "ResourceName",  "Tags", "TagName", "StatusExtended"]
 
 
 # Lambda execution starts here
@@ -150,6 +150,8 @@ def process_prowler_ocsf(f):
         start_time="N/A"
         age="N/A"
 
+    labels = process_labels(f['resources'][0]['labels'])
+
     row = [
         f['finding_info']['uid'],
         f['event_time'],
@@ -167,9 +169,24 @@ def process_prowler_ocsf(f):
         f['resources'][0]['uid'],
         f['resources'][0]['name'],
         ' | '.join(f['resources'][0]['labels']),
+        labels.get("Name", "N/A"),
         f['status_detail'][:512],
     ]
     return(row)
+
+
+def process_labels(label_list):
+    label_dict = {}
+    for label in label_list:
+        # If label begins with "aws" then the value is the [-1] and the key is everything before
+        # Otherwise the key is [0] and the value is everything after.
+        if label.startswith("aws:"):
+            key, value = ":".join(label.split(":")[:-1]), label.split(":")[-1]
+        else:
+            key, value = label.split(":", 1)
+
+        label_dict[key] = value
+    return label_dict
 
 
 def process_prowler_native(f):
