@@ -159,6 +159,10 @@ def send_slack_message(token: str, channel_id: str, text: Optional[str] = None, 
     http = urllib3.PoolManager()
     response = http.request("POST", url, body=json.dumps(payload), headers=headers)
 
+    if response.status == 429: # Rate Limit
+        sleep(10)
+        response = http.request("POST", url, body=json.dumps(payload), headers=headers)
+
     if response.status != 200:
         raise SlackException(f"HTTP error {response.status}: {response.data.decode('utf-8')}")
 

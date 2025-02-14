@@ -50,12 +50,15 @@ def handler(event, context):
             continue
         if record['eventName'] == "INSERT":
             ddb_record = record['dynamodb']['NewImage']
-            logger.debug(ddb_record)
+            # logger.debug(ddb_record)
             new_image = deseralize(ddb_record)
             finding_uid = new_image.get("finding_info_uid")
             metadata_event_code = new_image.get("metadata_event_code")
             if metadata_event_code not in config_data.get("ProwlerChecks", []):
                 logger.info(f"Check {metadata_event_code} is not in the list of checks to alert on")
+                continue
+            if new_image["severity"].lower() != "critical":
+                logger.warning(f"Finding code was {metadata_event_code} but Severity wasn't critical {new_image['severity']}, so not reporting")
                 continue
             blocks = generate_finding_alert(new_image)
             logger.debug(json.dumps(blocks, default=str))
