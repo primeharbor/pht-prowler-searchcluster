@@ -172,6 +172,7 @@ endif
 
 clean:
 	cd lambda && $(MAKE) clean
+	cd gsheet-lambda  && $(MAKE) clean
 
 #
 # Bucket Import

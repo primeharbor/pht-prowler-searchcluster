@@ -18,7 +18,7 @@ PIP=pip3
 
 FILES =	import_findings.py process_finding_file.py
 
-DEPENDENCIES=elasticsearch requests_aws4auth bin certifi idna charset_normalizer six.py urllib3 elastic_transport requests dateutil opensearchpy cachetools docs google google_auth_oauthlib gspread oauthlib pyasn1 pyasn1_modules requests_oauthlib rsa scripts strenum
+DEPENDENCIES=elasticsearch requests_aws4auth bin certifi idna charset_normalizer six.py urllib3 elastic_transport requests dateutil opensearchpy cachetools docs google google_auth_oauthlib gspread oauthlib pyasn1 pyasn1_modules requests_oauthlib rsa scripts strenum apiclient googleapiclient google_auth_httplib2.py proto httplib2 uritemplate pyparsing
 
 clean:
 	rm -rf __pycache__ *.zip *.dist-info *.egg-info $(DEPENDENCIES)
