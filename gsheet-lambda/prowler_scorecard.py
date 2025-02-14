@@ -33,7 +33,7 @@ logging.getLogger('botocore').setLevel(logging.WARNING)
 logging.getLogger('boto3').setLevel(logging.WARNING)
 logging.getLogger('urllib3').setLevel(logging.WARNING)
 
-HEADER_ROW = ['FindingUniqueId', 'AssessmentStartTime', 'FindingFirstSeen', 'AgeInDays', 'AccountId', 'AccountName', 'CheckID', "Severity", 'Status', "CheckTitle", "ServiceName", "SubServiceName", "Region", "ResourceArn", "ResourceName",  "Tags", "TagName", "StatusExtended"]
+HEADER_ROW = ['FindingUniqueId', 'AssessmentStartTime', 'FindingFirstSeen', 'AgeInDays', 'AccountId', 'AccountName', 'CheckID', "Severity", 'Status', "CheckTitle", "ServiceName", "SubServiceName", "Region", "ResourceArn", "ResourceName",  "Tags", "StatusExtended"]
 
 
 # Lambda execution starts here
@@ -89,7 +89,16 @@ def process_file(bucket, obj_key):
         raise Exception(f"Got unsupported Cloud Provider Type: {cloud_provider}")
 
     worksheet_name = f"All-Findings"
-    gsheet = open_or_create_gsheet(sheet_name, worksheet_name, HEADER_ROW)
+    all_headers = HEADER_ROW
+    try:
+        custom_tag_str = os.getenv('CUSTOM_TAGS', default="[]")
+        custom_tags = json.loads(custom_tag_str)
+        for tag in custom_tags:
+            all_headers.append(f"TAG-{tag}")
+    except exception as e:
+        logger.error(f"Failed to get or parse the custom tags: {e} - {custom_tag_str}")
+
+    gsheet = open_or_create_gsheet(sheet_name, worksheet_name, all_headers)
 
     if gsheet is None:
         logger.critical(f"Failed to open {sheet_name}. Aborting...")
@@ -169,9 +178,14 @@ def process_prowler_ocsf(f):
         f['resources'][0]['uid'],
         f['resources'][0]['name'],
         ' | '.join(f['resources'][0]['labels']),
-        labels.get("Name", "N/A"),
         f['status_detail'][:512],
     ]
+
+    custom_tag_str = os.getenv('CUSTOM_TAGS', default="[]")
+    custom_tags = json.loads(custom_tag_str)
+    for tag in custom_tags:
+        row.append(labels.get(tag, "N/A"))
+
     return(row)
 
 

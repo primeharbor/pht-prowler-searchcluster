@@ -52,6 +52,11 @@ Parameters:
     Type: String
     Default: 2048
 
+  pCustomTags:
+    Description: List of Tag Keys to include in the report
+    Type: String
+    Default: "[]"
+
 Conditions:
   cAlarmActions: !Not [!Equals [ !Ref pAlertTopicArn, "None" ]]
 
@@ -65,6 +70,7 @@ Globals:
           LOG_LEVEL: 'INFO'
           GSHEET_SECRET: !Ref pGoogleSheetSecretArn
           GOOGLE_DRIVE_ID: !Ref pGoogleDriveFolderId
+          CUSTOM_TAGS: !Ref pCustomTags
 
 Resources:
 
