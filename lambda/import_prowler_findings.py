@@ -64,7 +64,8 @@ def handler(event, context):
             finding_body['resource'] = finding_body['resources'][0]
 
         del(finding_body['unmapped']['compliance'])
-        del(finding_body['resources'][0]['data']['metadata'])
+        if 'metadata' in finding_body['resources'][0]['data']:
+            del(finding_body['resources'][0]['data']['metadata'])
 
         logger.debug(f"Indexing finding for {finding_body['finding_info']['uid']} with a status of {finding_body['status_code']}")
 
