@@ -200,11 +200,54 @@ Resources:
         IgnorePublicAcls: True
         RestrictPublicBuckets: True  # This rule also prohibits Cross-Account bucket access
 
+  SNSEncryptionKey:
+    Type: AWS::KMS::Key
+    Properties:
+      Description: KMS key for SNS topic encryption (S3 event notifications)
+      EnableKeyRotation: true
+      KeyPolicy:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: Enable IAM User Permissions
+            Effect: Allow
+            Principal:
+              AWS: !Sub 'arn:aws:iam::${AWS::AccountId}:root'
+            Action: 'kms:*'
+            Resource: '*'
+          - Sid: Allow S3 to use the key for SNS
+            Effect: Allow
+            Principal:
+              Service: s3.amazonaws.com
+            Action:
+              - 'kms:Decrypt'
+              - 'kms:GenerateDataKey'
+            Resource: '*'
+            Condition:
+              StringEquals:
+                'aws:SourceAccount': !Ref AWS::AccountId
+              ArnLike:
+                'aws:SourceArn': !Sub 'arn:aws:s3:::${pBucketName}'
+          - Sid: Allow SNS to use the key
+            Effect: Allow
+            Principal:
+              Service: sns.amazonaws.com
+            Action:
+              - 'kms:Decrypt'
+              - 'kms:GenerateDataKey'
+            Resource: '*'
+
+  SNSEncryptionKeyAlias:
+    Type: AWS::KMS::Alias
+    Properties:
+      AliasName: !Sub 'alias/${pBucketName}-sns-encryption'
+      TargetKeyId: !Ref SNSEncryptionKey
+
   OutputNotificationTopic:
     Type: AWS::SNS::Topic
     Properties:
       DisplayName: !Sub "Destination of PutObject calls from ${pBucketName}/prowler4-output/json-ocsf/"
       TopicName: !Sub "${pBucketName}-AWS-S3Events"
+      KmsMasterKeyId: !Ref SNSEncryptionKey
 
   ProwlerBucketNotificationTopicPolicy:
     Type: AWS::SNS::TopicPolicy
@@ -234,6 +277,7 @@ Resources:
     Properties:
       DisplayName: !Sub "Destination of PutObject calls from ${pBucketName}/prowler4-output/json-ocsf-processed/"
       TopicName: !Sub "${pBucketName}-AWS-Processed-S3Events"
+      KmsMasterKeyId: !Ref SNSEncryptionKey
 
   ProwlerBucketProcessedFindingsNotificationTopicPolicy:
     Type: AWS::SNS::TopicPolicy
@@ -263,6 +307,7 @@ Resources:
     Properties:
       DisplayName: !Sub "Destination of PutObject calls from ${pBucketName}/prowler-gcp-output/"
       TopicName: !Sub "${pBucketName}-GCP-S3Events"
+      KmsMasterKeyId: !Ref SNSEncryptionKey
 
   ProwlerBucketGCPNotificationTopicPolicy:
     Type: AWS::SNS::TopicPolicy
@@ -292,6 +337,10 @@ Resources:
   #
   ECSCluster:
     Type: AWS::ECS::Cluster
+    Properties:
+      ClusterSettings:
+        - Name: containerInsights
+          Value: enabled
 
   ProwlerTaskDefinition:
     Type: AWS::ECS::TaskDefinition
@@ -789,6 +838,9 @@ Resources:
         SSEEnabled: true
         SSEType: KMS
         KMSMasterKeyId: !Ref ProwlerFindingsTrackingTableKey
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      DeletionProtectionEnabled: true
     DeletionPolicy: RetainExceptOnCreate
 
   ProwlerFindingsTrackingTableKey:
