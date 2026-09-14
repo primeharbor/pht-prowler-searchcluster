@@ -30,10 +30,6 @@ fi
 
 ulimit -n 4096
 
-if [[ -z "$REGIONS" ]] ; then
-	REGIONS="ap-south-1 eu-north-1 eu-west-3 eu-west-2 eu-west-1 ap-northeast-3 ap-northeast-2 ap-northeast-1 ca-central-1 sa-east-1 ap-southeast-1 ap-southeast-2 eu-central-1 us-east-1 us-east-2 us-west-1 us-west-2"
-fi
-
 # Slack Support
 SLACK=" --slack "
 if [[ -z "$SLACK_API_TOKEN" ]] ; then
@@ -61,6 +57,8 @@ TODAY=`date +%Y-%m-%d`
 # Log this in the CW Logs
 prowler --version
 
+echo "Starting Prowler Scan of all accounts in the organization at `date`"
+
 while read line ; do
 
 	START=`date +%s`
@@ -75,7 +73,7 @@ while read line ; do
 
 	echo "Starting Scan of account $ACCOUNT_ID at epoch timestamp $START."
 	echo "Command: 	prowler aws -M csv json-ocsf json-asff -b -z $SLACK $SECURITY_HUB_FLAG \
-		--checks-file checks.json -f $REGIONS \
+		--checks-file checks.json \
 		--config-file config.yaml -w allow_list.yaml \
 		--custom-checks-metadata-file metadata.yaml \
 		--log-file prowler-logs-${ACCOUNT_ID}-${TODAY}.json \
@@ -83,10 +81,11 @@ while read line ; do
 		--role arn:aws:iam::$ACCOUNT_ID:role/$ROLENAME \
 		--organizations-role arn:aws:iam::$PAYER_ID:role/$ROLENAME \
 		--output-bucket-no-assume ${OUTPUT_BUCKET} \
+		--excluded-service ecs \
 		--output-directory prowler4-output 2> prowler-errors-${ACCOUNT_ID}-${TODAY}.log > prowler-logs-${ACCOUNT_ID}-${TODAY}.log"
 
 	prowler aws -M csv json-ocsf json-asff -b -z $SLACK $SECURITY_HUB_FLAG \
-		--checks-file checks.json -f $REGIONS \
+		--checks-file checks.json \
 		--config-file config.yaml -w allow_list.yaml \
 		--custom-checks-metadata-file metadata.yaml \
 		--log-file prowler-logs-${ACCOUNT_ID}-${TODAY}.json \
@@ -94,6 +93,7 @@ while read line ; do
 		--role arn:aws:iam::$ACCOUNT_ID:role/$ROLENAME \
 		--organizations-role arn:aws:iam::$PAYER_ID:role/$ROLENAME \
 		--output-bucket-no-assume ${OUTPUT_BUCKET} \
+		--excluded-service ecs \
 		--output-directory prowler4-output 2> prowler-errors-${ACCOUNT_ID}-${TODAY}.log > prowler-logs-${ACCOUNT_ID}-${TODAY}.log
 	RC=$?
 
@@ -112,3 +112,5 @@ while read line ; do
 	echo "Prowler Exited for $ACCOUNT_ID with error code $RC after $DUR seconds"
 
 done < <(aws organizations list-accounts --query Accounts[].[Id,Status] --output text | grep ACTIVE )
+
+echo "Completed Prowler Scan of all accounts in the organization at `date`"
