@@ -24,7 +24,7 @@ prowler.err
 *-metadata.yaml
 
 lambda/bin
-lambda/certifi
+lambda/anyio
 lambda/certifi
 lambda/certifi-2023.5.7.dist-info
 lambda/charset_normalizer
@@ -37,6 +37,7 @@ lambda/idna
 lambda/urllib3
 lambda/dateutil
 lambda/opensearchpy
+lambda/opensearch
 lambda/events
 lambda/yaml
 lambda/_yaml
@@ -47,6 +48,10 @@ lambda/jmespath
 lambda/s3transfer
 lambda/simplejson
 lambda/tests
+lambda/google
+lambda/grpc
+lambda/sniffio
+lambda/typing_extensions.py
 
 gsheet-lambda/apiclient
 gsheet-lambda/bin
